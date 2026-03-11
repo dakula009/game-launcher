@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QEvent, Qt, QUrl
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDialog,
@@ -90,6 +90,10 @@ class GameGrid(QScrollArea):
         self.setAcceptDrops(True)
         self.setStyleSheet("background: #1a1a2e; border: none;")
 
+        # The viewport intercepts drag events in QScrollArea — redirect them here
+        self.viewport().setAcceptDrops(True)
+        self.viewport().installEventFilter(self)
+
         self._container = QWidget()
         self._container.setStyleSheet("background: #1a1a2e;")
         self._layout = QGridLayout(self._container)
@@ -148,6 +152,19 @@ class GameGrid(QScrollArea):
     # ------------------------------------------------------------------
     # Drag-and-drop
     # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event):
+        if obj == self.viewport():
+            if event.type() == QEvent.Type.DragEnter:
+                self.dragEnterEvent(event)
+                return True
+            elif event.type() == QEvent.Type.DragMove:
+                self.dragMoveEvent(event)
+                return True
+            elif event.type() == QEvent.Type.Drop:
+                self.dropEvent(event)
+                return True
+        return super().eventFilter(obj, event)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

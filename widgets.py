@@ -2,21 +2,19 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PySide6.QtCore import QEvent, Qt, QUrl
+from PySide6.QtCore import QFileInfo, Qt, QUrl
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
+    QFileDialog,
+    QFileIconProvider,
     QFrame,
     QGridLayout,
     QInputDialog,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
     QScrollArea,
-    QSizePolicy,
     QTabWidget,
     QToolBar,
     QVBoxLayout,
@@ -26,6 +24,8 @@ from PySide6.QtWidgets import (
 import launcher
 import storage
 from models import GameItem, GameTab
+
+_icon_provider = QFileIconProvider()
 
 
 class GameCard(QFrame):
@@ -48,17 +48,22 @@ class GameCard(QFrame):
         layout.setContentsMargins(4, 8, 4, 8)
         layout.setSpacing(6)
 
-        # Placeholder icon label
-        icon_label = QLabel("🎮")
+        # System icon via QFileIconProvider (shows real exe/lnk icon on Windows)
+        icon_label = QLabel()
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet("font-size: 36px;")
+        pixmap = _icon_provider.icon(QFileInfo(item.path)).pixmap(48, 48)
+        if not pixmap.isNull():
+            icon_label.setPixmap(pixmap)
+        else:
+            icon_label.setText("🎮")
+            icon_label.setStyleSheet("font-size: 36px;")
         layout.addWidget(icon_label)
 
         # Title label
         title_label = QLabel(item.title)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setWordWrap(True)
-        title_label.setStyleSheet("font-size: 11px; font-weight: bold;")
+        title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #eee;")
         layout.addWidget(title_label)
 
         self.setStyleSheet(
@@ -77,6 +82,25 @@ class GameCard(QFrame):
         menu.exec(event.globalPos())
 
 
+class _DroppableContainer(QWidget):
+    """Inner container widget that owns drag-and-drop, avoiding QScrollArea viewport issues."""
+
+    def __init__(self, grid: "GameGrid", parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._grid = grid
+        self.setAcceptDrops(True)
+        self.setStyleSheet("background: #1a1a2e;")
+
+    def dragEnterEvent(self, event):
+        self._grid.dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        self._grid.dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        self._grid.dropEvent(event)
+
+
 class GameGrid(QScrollArea):
     """Scrollable grid of GameCard widgets for one tab."""
 
@@ -87,22 +111,15 @@ class GameGrid(QScrollArea):
         self._cards: List[GameCard] = []
 
         self.setWidgetResizable(True)
-        self.setAcceptDrops(True)
         self.setStyleSheet("background: #1a1a2e; border: none;")
 
-        # The viewport intercepts drag events in QScrollArea — redirect them here
-        self.viewport().setAcceptDrops(True)
-        self.viewport().installEventFilter(self)
-
-        self._container = QWidget()
-        self._container.setStyleSheet("background: #1a1a2e;")
+        self._container = _DroppableContainer(self)
         self._layout = QGridLayout(self._container)
         self._layout.setContentsMargins(16, 16, 16, 16)
         self._layout.setSpacing(12)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setWidget(self._container)
 
-        # Populate existing games
         for item in tab.games:
             self._add_card(item)
 
@@ -112,11 +129,9 @@ class GameGrid(QScrollArea):
 
     def _columns(self) -> int:
         w = self.viewport().width()
-        cols = max(1, (w - 16) // (GameCard.CARD_W + 12))
-        return cols
+        return max(1, (w - 16) // (GameCard.CARD_W + 12))
 
     def _rebuild_grid(self):
-        """Re-place all cards in the grid (called after add/remove)."""
         for i, card in enumerate(self._cards):
             cols = self._columns()
             self._layout.addWidget(card, i // cols, i % cols)
@@ -138,7 +153,6 @@ class GameGrid(QScrollArea):
         self.main_window.save()
 
     def remove_game(self, item: GameItem):
-        # Find and remove the matching card
         card_to_remove = next((c for c in self._cards if c.item is item), None)
         if card_to_remove is None:
             return
@@ -150,28 +164,14 @@ class GameGrid(QScrollArea):
         self.main_window.save()
 
     # ------------------------------------------------------------------
-    # Drag-and-drop
+    # Drag-and-drop (called by _DroppableContainer)
     # ------------------------------------------------------------------
-
-    def eventFilter(self, obj, event):
-        if obj == self.viewport():
-            if event.type() == QEvent.Type.DragEnter:
-                self.dragEnterEvent(event)
-                return True
-            elif event.type() == QEvent.Type.DragMove:
-                self.dragMoveEvent(event)
-                return True
-            elif event.type() == QEvent.Type.Drop:
-                self.dropEvent(event)
-                return True
-        return super().eventFilter(obj, event)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
             if any(
                 url.toLocalFile().lower().endswith((".exe", ".lnk"))
-                for url in urls
+                for url in event.mimeData().urls()
             ):
                 event.acceptProposedAction()
                 return
@@ -184,27 +184,21 @@ class GameGrid(QScrollArea):
             event.ignore()
 
     def dropEvent(self, event):
-        added = 0
         skipped = 0
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path.lower().endswith((".exe", ".lnk")):
-                title = path.split("/")[-1].split("\\")[-1]
-                # Strip extension for a cleaner default title
-                title = title.rsplit(".", 1)[0]
-                item = GameItem(title=title, path=path)
-                self.add_game(item)
-                added += 1
+                title = path.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+                self.add_game(GameItem(title=title, path=path))
             else:
                 skipped += 1
-
+        event.acceptProposedAction()
         if skipped:
             QMessageBox.warning(
                 self,
                 "Unsupported file type",
-                f"{skipped} file(s) were ignored. Only .exe and .lnk files are supported.",
+                f"{skipped} file(s) ignored. Only .exe and .lnk are supported.",
             )
-        event.acceptProposedAction()
 
 
 class MainWindow(QMainWindow):
@@ -217,6 +211,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(
             "QMainWindow { background: #1a1a2e; }"
             "QTabWidget::pane { border: none; background: #1a1a2e; }"
+            "QTabWidget::tab-bar { alignment: center; }"
             "QTabBar::tab { background: #2a2a3e; color: #ccc; padding: 6px 16px; "
             "               border-radius: 4px 4px 0 0; margin-right: 2px; }"
             "QTabBar::tab:selected { background: #7c6af7; color: #fff; }"
@@ -244,6 +239,12 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Actions")
         self.addToolBar(toolbar)
 
+        add_game_action = QAction("+ Add Game", self)
+        add_game_action.triggered.connect(self._add_game_via_dialog)
+        toolbar.addAction(add_game_action)
+
+        toolbar.addSeparator()
+
         add_tab_action = QAction("+ Add Tab", self)
         add_tab_action.triggered.connect(self._add_tab)
         toolbar.addAction(add_tab_action)
@@ -265,6 +266,24 @@ class MainWindow(QMainWindow):
             self._tab_widget.addTab(grid, tab.name)
 
     # ------------------------------------------------------------------
+    # Game management
+    # ------------------------------------------------------------------
+
+    def _add_game_via_dialog(self):
+        idx = self._tab_widget.currentIndex()
+        if idx < 0:
+            return
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Game Executable or Shortcut",
+            "",
+            "Games (*.exe *.lnk)",
+        )
+        for path in paths:
+            title = path.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+            self._grids[idx].add_game(GameItem(title=title, path=path))
+
+    # ------------------------------------------------------------------
     # Tab management
     # ------------------------------------------------------------------
 
@@ -283,8 +302,7 @@ class MainWindow(QMainWindow):
         idx = self._tab_widget.currentIndex()
         if idx < 0:
             return
-        current_name = self._tabs[idx].name
-        name, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=current_name)
+        name, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=self._tabs[idx].name)
         if ok and name.strip():
             self._tabs[idx].name = name.strip()
             self._tab_widget.setTabText(idx, name.strip())

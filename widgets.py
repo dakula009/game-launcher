@@ -377,13 +377,13 @@ class GameCard(QFrame):
         layout.addWidget(self._title_label)
 
         # Play overlay — green square centered over icon area
-        overlay_size = 48
+        overlay_size = 80
         ox = (self.CARD_W - overlay_size) // 2
-        oy = 10 + (72 - overlay_size) // 2
+        oy = max(4, 10 + (72 - overlay_size) // 2)
         self._play_overlay = QLabel("▶", self)
         self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._play_overlay.setStyleSheet(
-            f"background: {GREEN_PLAY}; color: white; font-size: 20px; border-radius: 8px;"
+            f"background: {GREEN_PLAY}; color: white; font-size: 40px; border-radius: 10px;"
         )
         self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()

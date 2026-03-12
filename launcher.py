@@ -4,11 +4,11 @@ import subprocess
 
 
 def launch(path: str) -> None:
-    """Launch a game executable or shortcut.
+    """Launch a game executable, shortcut, or steam:// URL.
 
-    On Windows, os.startfile handles both .exe and .lnk files.
-    .lnk shortcut resolution only works correctly on Windows (shell feature).
-    On Mac (dev only), uses 'open' for basic testing.
+    steam:// protocol is handled natively by Windows via os.startfile.
+    On Mac, 'open' forwards steam:// to the Steam app if installed.
+    .lnk shortcut resolution only works correctly on Windows.
     """
     system = platform.system()
     if system == "Windows":

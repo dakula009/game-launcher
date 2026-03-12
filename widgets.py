@@ -589,6 +589,10 @@ class MainWindow(QMainWindow):
         delete_tab_action.triggered.connect(self._delete_tab)
         toolbar.addAction(delete_tab_action)
 
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self._show_about)
+        toolbar.addAction(about_action)
+
         # Push search bar to the right
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -693,6 +697,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Game management
     # ------------------------------------------------------------------
+
+    def _show_about(self):
+        QMessageBox.information(self, "About", "RL alright reserved 2026")
 
     def _add_game_via_dialog(self):
         idx = self._tab_widget.currentIndex()

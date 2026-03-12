@@ -699,7 +699,14 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _show_about(self):
-        QMessageBox.information(self, "About", "RL all rights reserved 2026")
+        QMessageBox.information(
+            self,
+            "About",
+            "My Game Hub (ver. 1.0)\n\n"
+            "A personal game launcher for organizing and launching your game library.\n\n"
+            "© 2026 RL. All rights reserved.\n"
+            "Contact: kula009@gmail.com",
+        )
 
     def _add_game_via_dialog(self):
         idx = self._tab_widget.currentIndex()

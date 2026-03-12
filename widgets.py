@@ -268,9 +268,21 @@ class GameGrid(QScrollArea):
         self._layout.setSpacing(12)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setWidget(self._container)
+        self._last_col_count = 0
 
         for item in tab.games:
             self._add_card(item)
+
+    # ------------------------------------------------------------------
+    # Resize: reflow cards when column count changes
+    # ------------------------------------------------------------------
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        new_cols = self._columns()
+        if new_cols != self._last_col_count:
+            self._last_col_count = new_cols
+            self._rebuild_grid()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -411,10 +423,11 @@ class MainWindow(QMainWindow):
             "QToolBar { background: #12122a; border: none; spacing: 6px; padding: 4px; }"
             "QToolBar QToolButton { color: #ccc; padding: 4px 10px; border-radius: 4px; }"
             "QToolBar QToolButton:hover { background: #2a2a3e; }"
-            "QMenu { background-color: #3a3a5e; color: #ffffff; border: 1px solid #7c6af7; }"
-            "QMenu::item { padding: 6px 20px; }"
+            "QMenu { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #52528a, stop:1 #3e3e6e);"
+            "        color: #ffffff; border: 2px solid #a090ff; }"
+            "QMenu::item { padding: 7px 22px; }"
             "QMenu::item:selected { background-color: #7c6af7; color: #ffffff; }"
-            "QMenu::separator { height: 1px; background: #555; margin: 4px 8px; }"
+            "QMenu::separator { height: 1px; background: #7070aa; margin: 4px 8px; }"
         )
 
         self._tabs: List[GameTab] = storage.load()

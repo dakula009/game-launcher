@@ -249,6 +249,13 @@ class _DroppableContainer(QWidget):
     def dropEvent(self, event):
         self._grid.dropEvent(event)
 
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        add_action = QAction("+ Add Game", self)
+        add_action.triggered.connect(self._grid.main_window._add_game_via_dialog)
+        menu.addAction(add_action)
+        menu.exec(event.globalPos())
+
 
 class GameGrid(QScrollArea):
     """Scrollable grid of GameCard widgets for one tab."""
@@ -424,7 +431,7 @@ class MainWindow(QMainWindow):
             "QToolBar QToolButton { color: #ccc; padding: 4px 10px; border-radius: 4px; }"
             "QToolBar QToolButton:hover { background: #2a2a3e; }"
             "QMenu { background-color: #6c5ce7; color: #ffffff;"
-            "        border: 3px solid #dcd6ff; border-radius: 6px; }"
+            "        border: 4px solid #7c6af7; border-radius: 6px; }"
             "QMenu::item { padding: 7px 22px; }"
             "QMenu::item:selected { background-color: #a29bfe; color: #1a1a2e; }"
             "QMenu::separator { height: 1px; background: #a29bfe; margin: 4px 8px; }"

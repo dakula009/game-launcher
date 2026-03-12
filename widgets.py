@@ -169,7 +169,7 @@ class GameCard(QFrame):
 
         # Star (top-right corner, always visible)
         self._star = QLabel(self)
-        self._star.setGeometry(self.CARD_W - 22, 4, 18, 18)
+        self._star.setGeometry(self.CARD_W - 22, self.CARD_H - 22, 18, 18)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._refresh_star()
 

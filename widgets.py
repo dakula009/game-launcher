@@ -409,10 +409,18 @@ class GameGrid(QScrollArea):
         cols = self._columns()
         self._layout.addWidget(card, idx // cols, idx % cols)
 
-    def add_game(self, item: GameItem):
+    def add_game(self, item: GameItem) -> bool:
+        if any(g.path.lower() == item.path.lower() for g in self.tab.games):
+            QMessageBox.warning(
+                self,
+                "Duplicate Game",
+                f'"{item.title}" is already in this tab.',
+            )
+            return False
         self.tab.games.append(item)
         self._add_card(item)
         self.main_window.save()
+        return True
 
     def remove_game(self, item: GameItem):
         card = next((c for c in self._cards if c.item is item), None)
@@ -499,7 +507,7 @@ class GameGrid(QScrollArea):
         for url in event.mimeData().urls():
             item = _make_game_item_from_path(url.toLocalFile())
             if item:
-                self.add_game(item)
+                self.add_game(item)  # shows its own warning if duplicate
             else:
                 skipped += 1
         event.acceptProposedAction()
@@ -539,6 +547,13 @@ class MainWindow(QMainWindow):
             "QMenu::item { padding: 7px 22px; }"
             "QMenu::item:selected { background-color: #a29bfe; color: #1a1a2e; }"
             "QMenu::separator { height: 1px; background: #a29bfe; margin: 4px 8px; }"
+            "QDialog { background: #1a1a2e; color: #eee; }"
+            "QDialog QLabel { color: #eee; }"
+            "QDialog QLineEdit { background: #2a2a3e; color: #eee; border: 1px solid #444;"
+            "                    border-radius: 4px; padding: 4px 8px; }"
+            "QDialog QPushButton { background: #2a2a3e; color: #eee; padding: 4px 14px;"
+            "                      border: 1px solid #444; border-radius: 4px; }"
+            "QDialog QPushButton:hover { background: #7c6af7; color: #fff; border-color: #7c6af7; }"
         )
 
         self._tabs: List[GameTab] = storage.load()
@@ -555,6 +570,7 @@ class MainWindow(QMainWindow):
         self._tab_widget.setTabsClosable(False)
         self._tab_widget.setMovable(True)
         self._tab_widget.tabBar().tabMoved.connect(self._on_tab_moved)
+        self._tab_widget.tabBar().installEventFilter(self)
         self.setCentralWidget(self._tab_widget)
 
         self._search_popup = SearchPopup()
@@ -608,6 +624,19 @@ class MainWindow(QMainWindow):
         )
         self._search_bar.textChanged.connect(self._on_search_text_changed)
         toolbar.addWidget(self._search_bar)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is self._tab_widget.tabBar() and event.type() == QEvent.Type.ContextMenu:
+            idx = self._tab_widget.tabBar().tabAt(event.pos())
+            if idx > 0:  # 0 is Favorites — protected
+                menu = QMenu(self)
+                rename_action = QAction("Rename Tab", self)
+                rename_action.triggered.connect(lambda: self._rename_tab(idx))
+                menu.addAction(rename_action)
+                menu.exec(event.globalPos())
+            return True
+        return super().eventFilter(obj, event)
 
     def _populate_tabs(self):
         self._tab_widget.clear()
@@ -742,17 +771,23 @@ class MainWindow(QMainWindow):
 
     def _add_tab(self):
         name, ok = QInputDialog.getText(self, "New Tab", "Tab name:")
-        if ok and name.strip():
-            new_tab = GameTab(name=name.strip())
-            self._tabs.append(new_tab)
-            grid = GameGrid(new_tab, self)
-            self._grids.append(grid)
-            self._tab_widget.addTab(grid, new_tab.name)
-            self._tab_widget.setCurrentIndex(self._tab_widget.count() - 1)
-            self.save()
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        if name.lower() in [t.name.lower() for t in self._tabs]:
+            QMessageBox.warning(self, "Duplicate Tab", f'A tab named "{name}" already exists.')
+            return
+        new_tab = GameTab(name=name)
+        self._tabs.append(new_tab)
+        grid = GameGrid(new_tab, self)
+        self._grids.append(grid)
+        self._tab_widget.addTab(grid, new_tab.name)
+        self._tab_widget.setCurrentIndex(self._tab_widget.count() - 1)
+        self.save()
 
-    def _rename_tab(self):
-        idx = self._tab_widget.currentIndex()
+    def _rename_tab(self, idx: int = -1):
+        if idx < 0:
+            idx = self._tab_widget.currentIndex()
         if idx == 0:
             QMessageBox.information(self, "Favorites", "The Favorites tab cannot be renamed.")
             return
@@ -760,10 +795,16 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(
             self, "Rename Tab", "New name:", text=self._tabs[real_idx].name
         )
-        if ok and name.strip():
-            self._tabs[real_idx].name = name.strip()
-            self._tab_widget.setTabText(idx, name.strip())
-            self.save()
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        existing = [t.name.lower() for i, t in enumerate(self._tabs) if i != real_idx]
+        if name.lower() in existing:
+            QMessageBox.warning(self, "Duplicate Tab", f'A tab named "{name}" already exists.')
+            return
+        self._tabs[real_idx].name = name
+        self._tab_widget.setTabText(idx, name)
+        self.save()
 
     def _delete_tab(self):
         idx = self._tab_widget.currentIndex()

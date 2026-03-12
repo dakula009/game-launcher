@@ -179,19 +179,38 @@ class FlowLayout(QLayout):
     def _do_layout(self, rect: QRect, test_only: bool) -> int:
         m = self.contentsMargins()
         eff = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
-        x, y, line_h = eff.x(), eff.y(), 0
+        eff_w = eff.width()
+
+        # Pass 1: group items into rows
+        rows: list = []
+        row: list = []
+        row_w = 0
         for item in self._items:
             w = item.sizeHint().width()
-            h = item.sizeHint().height()
-            if x + w > eff.right() and line_h > 0:
-                x = eff.x()
-                y += line_h + self._v_spacing
-                line_h = 0
-            if not test_only:
-                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
-            x += w + self._h_spacing
-            line_h = max(line_h, h)
-        return y + line_h - rect.y() + m.bottom()
+            needed = w if not row else w + self._h_spacing
+            if row and row_w + needed > eff_w:
+                rows.append(row)
+                row = [(item, w, item.sizeHint().height())]
+                row_w = w
+            else:
+                row.append((item, w, item.sizeHint().height()))
+                row_w += needed
+        if row:
+            rows.append(row)
+
+        # Pass 2: place each row centered
+        y = eff.y()
+        for row in rows:
+            row_content_w = sum(w for _, w, _ in row) + self._h_spacing * (len(row) - 1)
+            x = eff.x() + max(0, (eff_w - row_content_w) // 2)
+            row_h = max(h for _, _, h in row)
+            for item, w, h in row:
+                if not test_only:
+                    item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+                x += w + self._h_spacing
+            y += row_h + self._v_spacing
+
+        return y - (self._v_spacing if rows else 0) - rect.y() + m.bottom()
 
 
 # ---------------------------------------------------------------------------

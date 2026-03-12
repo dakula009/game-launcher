@@ -100,6 +100,12 @@ class GameCard(QFrame):
         )
         pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(48, 48) if icon_source else None
         if pixmap and not pixmap.isNull():
+            if pixmap.width() != 48 or pixmap.height() != 48:
+                pixmap = pixmap.scaled(
+                    48, 48,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
             self._icon_label.setPixmap(pixmap)
         else:
             self._icon_label.setText("🎮")

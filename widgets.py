@@ -247,7 +247,7 @@ class WrapTabBar(QWidget):
             is_selected = (i == current_idx) and not is_plus
             btn = QPushButton(name)
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            self._style_btn(btn, is_selected, is_plus)
+            self._style_btn(btn, is_selected, is_plus, is_favorites=(i == 0))
             btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
             if not is_plus and i > 0:
                 btn.installEventFilter(self)
@@ -345,7 +345,7 @@ class WrapTabBar(QWidget):
         self._dragging = False
         self.unsetCursor()
 
-    def _style_btn(self, btn: QPushButton, selected: bool, is_plus: bool) -> None:
+    def _style_btn(self, btn: QPushButton, selected: bool, is_plus: bool, is_favorites: bool = False) -> None:
         if is_plus:
             btn.setStyleSheet(
                 f"QPushButton {{ background: {BG_TABBAR}; color: {TEXT_SEC};"
@@ -358,6 +358,13 @@ class WrapTabBar(QWidget):
                 f"QPushButton {{ background: {ACCENT}; color: #fff; font-weight: bold;"
                 f" border: 1px solid {ACCENT}; border-radius: 8px;"
                 f" padding: 8px 22px; font-size: 13px; min-width: 60px; }}"
+            )
+        elif is_favorites:
+            btn.setStyleSheet(
+                f"QPushButton {{ background: #3a3010; color: #f5d060;"
+                f" border: 1px solid #7a6520; border-radius: 8px;"
+                f" padding: 8px 22px; font-size: 13px; min-width: 60px; }}"
+                f"QPushButton:hover {{ background: #4a3e18; color: #fde68a; }}"
             )
         else:
             btn.setStyleSheet(

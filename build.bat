@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-pip install pyinstaller --quiet
+pip install --upgrade pyinstaller --quiet
 pyinstaller my_game_hub.spec --clean
 echo.
 echo Done! Your app is in: dist\MyGameHub\

@@ -6,7 +6,7 @@ import os
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    datas=[('assets', 'assets')] if os.path.isdir('assets') else [],
+    datas=[('gamehub.ico', '.')] + ([('assets', 'assets')] if os.path.isdir('assets') else []),
     binaries=[],
     hiddenimports=[
         'PySide6.QtCore',
@@ -36,6 +36,7 @@ exe = EXE(
     exclude_binaries=True,
     name='MyGameHub',
     console=False,
+    icon='gamehub.ico',
 )
 coll = COLLECT(
     exe,

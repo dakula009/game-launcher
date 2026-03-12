@@ -2,14 +2,12 @@
 # Run on Windows: pyinstaller my_game_hub.spec
 
 import os
-from PyInstaller.utils.hooks import collect_binaries, collect_data_files
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    datas=(collect_data_files('PySide6', includes=['*.pyi'])
-           + ([('assets', 'assets')] if os.path.isdir('assets') else [])),
-    binaries=collect_binaries('PySide6'),
+    datas=[('assets', 'assets')] if os.path.isdir('assets') else [],
+    binaries=[],
     hiddenimports=[
         'PySide6.QtCore',
         'PySide6.QtGui',

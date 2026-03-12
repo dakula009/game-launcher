@@ -220,6 +220,9 @@ class FlowLayout(QLayout):
 class WrapTabBar(QWidget):
     tab_clicked = Signal(int)
     tab_right_clicked = Signal(int)
+    tab_reordered = Signal(int, int)   # from_idx, to_idx
+
+    _DRAG_THRESHOLD = 8
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -228,6 +231,10 @@ class WrapTabBar(QWidget):
         self.setLayout(self._flow)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setStyleSheet(f"background: {BG};")
+        self._drag_src: int = -1
+        self._drag_start: Optional[QPoint] = None
+        self._dragging: bool = False
+        self._drag_label: Optional[QLabel] = None
 
     def rebuild(self, names: list, current_idx: int, plus_idx: int) -> None:
         while self._flow.count():
@@ -243,6 +250,7 @@ class WrapTabBar(QWidget):
             self._style_btn(btn, is_selected, is_plus)
             btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
             if not is_plus and i > 0:
+                btn.installEventFilter(self)
                 btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 btn.customContextMenuRequested.connect(
                     lambda pos, idx=i: self.tab_right_clicked.emit(idx)
@@ -250,6 +258,92 @@ class WrapTabBar(QWidget):
             self._flow.addWidget(btn)
 
         self.updateGeometry()
+
+    # ------------------------------------------------------------------
+    # Drag-to-reorder
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event):
+        if not isinstance(obj, QPushButton):
+            return super().eventFilter(obj, event)
+        etype = event.type()
+
+        if etype == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            self._drag_src = self._btn_index(obj)
+            self._drag_start = event.globalPosition().toPoint()
+            self._dragging = False
+            return False  # let button handle click normally
+
+        if etype == QEvent.Type.MouseMove and self._drag_src >= 0:
+            if not self._dragging:
+                dist = (event.globalPosition().toPoint() - self._drag_start).manhattanLength()
+                if dist > self._DRAG_THRESHOLD:
+                    self._dragging = True
+                    self._start_drag_visual(obj)
+            if self._dragging:
+                self._update_drag_visual(event.globalPosition().toPoint())
+                return True
+            return False
+
+        if etype == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if self._dragging:
+                local = self.mapFromGlobal(event.globalPosition().toPoint())
+                self._finish_drag(local)
+                return True  # suppress click signal
+            self._reset_drag()
+            return False
+
+        return False
+
+    def _btn_index(self, btn: QPushButton) -> int:
+        for i in range(self._flow.count()):
+            item = self._flow.itemAt(i)
+            if item and item.widget() is btn:
+                return i
+        return -1
+
+    def _btn_at_pos(self, local: QPoint) -> int:
+        for i in range(self._flow.count()):
+            item = self._flow.itemAt(i)
+            if item and item.widget() and item.geometry().contains(local):
+                return i
+        return -1
+
+    def _start_drag_visual(self, btn: QPushButton):
+        self._drag_label = QLabel(btn.text(), self.window())
+        self._drag_label.setStyleSheet(
+            f"background: {ACCENT}; color: #fff; font-weight: bold;"
+            f" border-radius: 8px; padding: 8px 22px; font-size: 13px;"
+        )
+        self._drag_label.adjustSize()
+        self._drag_label.raise_()
+        self._drag_label.show()
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def _update_drag_visual(self, global_pos: QPoint):
+        if self._drag_label:
+            local = self.window().mapFromGlobal(global_pos)
+            self._drag_label.move(
+                local.x() - self._drag_label.width() // 2,
+                local.y() - self._drag_label.height() // 2,
+            )
+
+    def _finish_drag(self, local: QPoint):
+        target = self._btn_at_pos(local)
+        src = self._drag_src
+        plus = self._flow.count() - 1
+        self._reset_drag()
+        if target > 0 and target < plus and target != src:
+            self.tab_reordered.emit(src, target)
+
+    def _reset_drag(self):
+        if self._drag_label:
+            self._drag_label.deleteLater()
+            self._drag_label = None
+        self._drag_src = -1
+        self._drag_start = None
+        self._dragging = False
+        self.unsetCursor()
 
     def _style_btn(self, btn: QPushButton, selected: bool, is_plus: bool) -> None:
         if is_plus:
@@ -798,6 +892,7 @@ class MainWindow(QMainWindow):
         self._wrap_tab_bar = WrapTabBar()
         self._wrap_tab_bar.tab_clicked.connect(self._tab_widget.setCurrentIndex)
         self._wrap_tab_bar.tab_right_clicked.connect(self._on_wrap_tab_right_click)
+        self._wrap_tab_bar.tab_reordered.connect(self._on_tabs_reordered)
 
         self._search_popup = SearchPopup()
         self._search_popup.result_selected.connect(self._on_search_result_selected)
@@ -886,6 +981,18 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Tab right-click context menu (from WrapTabBar)
     # ------------------------------------------------------------------
+
+    def _on_tabs_reordered(self, from_idx: int, to_idx: int) -> None:
+        real_from = from_idx - 1
+        real_to = to_idx - 1
+        self._tabs.insert(real_to, self._tabs.pop(real_from))
+        self._grids.insert(real_to, self._grids.pop(real_from))
+        self._tab_widget.blockSignals(True)
+        self._tab_widget.tabBar().moveTab(from_idx, to_idx)
+        self._tab_widget.setCurrentIndex(to_idx)
+        self._tab_widget.blockSignals(False)
+        self._rebuild_wrap_tab_bar()
+        self.save()
 
     def _on_wrap_tab_right_click(self, idx: int) -> None:
         if 0 < idx < self._plus_tab_idx():

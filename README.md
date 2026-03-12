@@ -1,4 +1,24 @@
-This game launcher is made by RL to add all your local games to a unified hub 
+My Game Hub is a lightweight, open-source game launcher for Windows that lets
+you organize your entire game library in one place — no matter where your
+games are installed.
+
+What it does:
+- Add games from any source: Steam shortcuts, Epic .exe files, GOG installers,
+ or any .lnk shortcut
+- Organize games into custom tabs (e.g. RPGs, FPS, Co-op)
+- Star your favorites — they instantly appear in a dedicated Favorites tab
+- Search across your entire library instantly
+- Launch any game with a single click
+- Drag cards to reorder, drag tabs to reorganize
+
+Why use it:
+Most launchers only manage their own ecosystem. My Game Hub sits on top of all
+ of them — a single hub where everything lives. It's a standalone .exe, no
+Python or installs required, and your library data stays local in
+%APPDATA%\MyGameHub.
+
+Tech: Built with Python + PySide6 (Qt6), packaged with PyInstaller.
+Version: 1.2 | License: MIT
 
 
 Steps to run the app:

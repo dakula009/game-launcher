@@ -345,7 +345,6 @@ class GameCard(QFrame):
 
         self.setFixedSize(self.CARD_W, self.CARD_H)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setToolTip(item.path)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout(self)
@@ -772,6 +771,8 @@ class MainWindow(QMainWindow):
             f"QDialog QPushButton {{ background: {BG_CARD}; color: {TEXT_PRI}; padding: 4px 14px;"
             f"                       border: 1px solid {BORDER}; border-radius: 6px; }}"
             f"QDialog QPushButton:hover {{ background: {ACCENT}; color: #fff; border-color: {ACCENT}; }}"
+            f"QToolTip {{ background: {BG_CARD}; color: {TEXT_PRI}; border: 1px solid {BORDER};"
+            f"            padding: 4px 8px; border-radius: 4px; }}"
         )
 
         self._tabs: List[GameTab] = storage.load()
@@ -892,6 +893,9 @@ class MainWindow(QMainWindow):
             rename_action = QAction("Rename Tab", self)
             rename_action.triggered.connect(lambda: self._rename_tab(idx))
             menu.addAction(rename_action)
+            delete_action = QAction("Delete Tab", self)
+            delete_action.triggered.connect(lambda: self._delete_tab_at(idx))
+            menu.addAction(delete_action)
             menu.exec(self._wrap_tab_bar.cursor().pos())
 
     # ------------------------------------------------------------------
@@ -1060,6 +1064,9 @@ class MainWindow(QMainWindow):
 
     def _delete_tab(self):
         idx = self._tab_widget.currentIndex()
+        self._delete_tab_at(idx)
+
+    def _delete_tab_at(self, idx: int):
         if idx == 0 or idx == self._plus_tab_idx():
             QMessageBox.information(self, "Info", "This tab cannot be deleted.")
             return

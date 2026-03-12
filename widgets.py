@@ -400,6 +400,8 @@ class MainWindow(QMainWindow):
 
         self._tab_widget = QTabWidget()
         self._tab_widget.setTabsClosable(False)
+        self._tab_widget.setMovable(True)
+        self._tab_widget.tabBar().tabMoved.connect(self._on_tab_moved)
         self.setCentralWidget(self._tab_widget)
 
         self._build_toolbar()
@@ -508,6 +510,15 @@ class MainWindow(QMainWindow):
             self._grids.pop(idx)
             self._tab_widget.removeTab(idx)
             self.save()
+
+    # ------------------------------------------------------------------
+    # Tab reordering
+    # ------------------------------------------------------------------
+
+    def _on_tab_moved(self, from_idx: int, to_idx: int):
+        self._tabs.insert(to_idx, self._tabs.pop(from_idx))
+        self._grids.insert(to_idx, self._grids.pop(from_idx))
+        self.save()
 
     # ------------------------------------------------------------------
     # Persistence

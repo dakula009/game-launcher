@@ -699,7 +699,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _show_about(self):
-        QMessageBox.information(self, "About", "RL alright reserved 2026")
+        QMessageBox.information(self, "About", "RL all rights reserved 2026")
 
     def _add_game_via_dialog(self):
         idx = self._tab_widget.currentIndex()

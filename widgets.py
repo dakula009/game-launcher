@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QDrag, QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -14,14 +14,17 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -120,6 +123,136 @@ class SearchPopup(QListWidget):
     def _on_item_clicked(self, li: QListWidgetItem) -> None:
         self.result_selected.emit(li.data(Qt.ItemDataRole.UserRole))
         self.hide()
+
+
+# ---------------------------------------------------------------------------
+# Flow layout — left-to-right, wraps to next row when width is exceeded
+# ---------------------------------------------------------------------------
+
+class FlowLayout(QLayout):
+    def __init__(self, parent=None, h_spacing: int = 4, v_spacing: int = 4):
+        super().__init__(parent)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items: list = []
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index: int):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QRect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QSize:
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        size += QSize(m.left() + m.right(), m.top() + m.bottom())
+        return size
+
+    def _do_layout(self, rect: QRect, test_only: bool) -> int:
+        m = self.contentsMargins()
+        eff = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
+        x, y, line_h = eff.x(), eff.y(), 0
+        for item in self._items:
+            w = item.sizeHint().width()
+            h = item.sizeHint().height()
+            if x + w > eff.right() and line_h > 0:
+                x = eff.x()
+                y += line_h + self._v_spacing
+                line_h = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+            x += w + self._h_spacing
+            line_h = max(line_h, h)
+        return y + line_h - rect.y() + m.bottom()
+
+
+# ---------------------------------------------------------------------------
+# Wrapping tab bar — individual buttons laid out with FlowLayout
+# ---------------------------------------------------------------------------
+
+class WrapTabBar(QWidget):
+    tab_clicked = Signal(int)
+    tab_right_clicked = Signal(int)
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._flow = FlowLayout(self, h_spacing=4, v_spacing=4)
+        self._flow.setContentsMargins(10, 8, 10, 8)
+        self.setLayout(self._flow)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setStyleSheet(f"background: {BG};")
+
+    def rebuild(self, names: list, current_idx: int, plus_idx: int) -> None:
+        while self._flow.count():
+            item = self._flow.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        for i, name in enumerate(names):
+            is_plus = (i == plus_idx)
+            is_selected = (i == current_idx) and not is_plus
+            btn = QPushButton(name)
+            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            self._style_btn(btn, is_selected, is_plus)
+            btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
+            if not is_plus and i > 0:
+                btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                btn.customContextMenuRequested.connect(
+                    lambda pos, idx=i: self.tab_right_clicked.emit(idx)
+                )
+            self._flow.addWidget(btn)
+
+        self.updateGeometry()
+
+    def _style_btn(self, btn: QPushButton, selected: bool, is_plus: bool) -> None:
+        if is_plus:
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {BG_TABBAR}; color: {TEXT_SEC};"
+                f" border: 1px solid {BORDER}; border-radius: 8px;"
+                f" padding: 8px 14px; font-size: 15px; min-width: 36px; }}"
+                f"QPushButton:hover {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
+            )
+        elif selected:
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {ACCENT}; color: #fff; font-weight: bold;"
+                f" border: 1px solid {ACCENT}; border-radius: 8px;"
+                f" padding: 8px 22px; font-size: 13px; min-width: 60px; }}"
+            )
+        else:
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {BG_TABBAR}; color: {TEXT_SEC};"
+                f" border: 1px solid {BORDER}; border-radius: 8px;"
+                f" padding: 8px 22px; font-size: 13px; min-width: 60px; }}"
+                f"QPushButton:hover {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -481,7 +614,6 @@ class GameGrid(QScrollArea):
     def _add_card(self, item: GameItem):
         card = GameCard(item, self)
         self._cards.append(card)
-        # Rebuild so placeholder always stays last
         self._rebuild_grid()
 
     def add_game(self, item: GameItem) -> bool:
@@ -632,25 +764,20 @@ class MainWindow(QMainWindow):
         )
         self._favorites_grid: Optional[GameGrid] = None
 
-        # Tab widget — pill-shaped tabs, no pane border
-        from PySide6.QtWidgets import QTabWidget
+        # Tab widget — no native tab bar; WrapTabBar renders tabs instead
         self._tab_widget = QTabWidget()
         self._tab_widget.setTabsClosable(False)
-        self._tab_widget.setMovable(True)
+        self._tab_widget.setMovable(False)
+        self._tab_widget.tabBar().hide()
         self._tab_widget.setStyleSheet(
             f"QTabWidget::pane {{ border: none; background: {BG}; }}"
-            f"QTabWidget::tab-bar {{ alignment: center; }}"
-            f"QTabBar {{ background: transparent; }}"
-            f"QTabBar::tab {{ background: {BG_TABBAR}; color: {TEXT_SEC}; padding: 8px 22px;"
-            f"                border-radius: 8px; margin: 5px 4px; font-size: 13px;"
-            f"                min-width: 60px; border: 1px solid {BORDER}; }}"
-            f"QTabBar::tab:selected {{ background: {ACCENT}; color: #fff; font-weight: bold;"
-            f"                         border-color: {ACCENT}; }}"
-            f"QTabBar::tab:hover:!selected {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
         )
-        self._tab_widget.tabBar().tabMoved.connect(self._on_tab_moved)
-        self._tab_widget.tabBar().installEventFilter(self)
         self._tab_widget.currentChanged.connect(self._on_tab_changed)
+
+        # Wrapping tab bar (custom, placed above QTabWidget)
+        self._wrap_tab_bar = WrapTabBar()
+        self._wrap_tab_bar.tab_clicked.connect(self._tab_widget.setCurrentIndex)
+        self._wrap_tab_bar.tab_right_clicked.connect(self._on_wrap_tab_right_click)
 
         self._search_popup = SearchPopup()
         self._search_popup.result_selected.connect(self._on_search_result_selected)
@@ -695,7 +822,16 @@ class MainWindow(QMainWindow):
         self._search_bar.textChanged.connect(self._on_search_text_changed)
         toolbar.addWidget(self._search_bar)
 
-        self.setCentralWidget(self._tab_widget)
+        # Container: WrapTabBar on top, QTabWidget (content) below
+        container = QWidget()
+        container.setStyleSheet(f"background: {BG};")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+        vbox.addWidget(self._wrap_tab_bar)
+        vbox.addWidget(self._tab_widget)
+
+        self.setCentralWidget(container)
         self._populate_tabs()
 
     def _populate_tabs(self):
@@ -717,25 +853,27 @@ class MainWindow(QMainWindow):
         self._tab_widget.addTab(QWidget(), _PLUS_TAB)
 
         self._tab_widget.blockSignals(False)
+        self._rebuild_wrap_tab_bar()
 
     def _plus_tab_idx(self) -> int:
         return self._tab_widget.count() - 1
 
+    def _rebuild_wrap_tab_bar(self) -> None:
+        current = self._tab_widget.currentIndex()
+        names = [self._tab_widget.tabText(i) for i in range(self._tab_widget.count())]
+        self._wrap_tab_bar.rebuild(names, current, self._plus_tab_idx())
+
     # ------------------------------------------------------------------
-    # Event filter (tab bar right-click)
+    # Tab right-click context menu (from WrapTabBar)
     # ------------------------------------------------------------------
 
-    def eventFilter(self, obj, event):
-        if obj is self._tab_widget.tabBar() and event.type() == QEvent.Type.ContextMenu:
-            idx = self._tab_widget.tabBar().tabAt(event.pos())
-            if 0 < idx < self._plus_tab_idx():
-                menu = QMenu(self)
-                rename_action = QAction("Rename Tab", self)
-                rename_action.triggered.connect(lambda: self._rename_tab(idx))
-                menu.addAction(rename_action)
-                menu.exec(event.globalPos())
-            return True
-        return super().eventFilter(obj, event)
+    def _on_wrap_tab_right_click(self, idx: int) -> None:
+        if 0 < idx < self._plus_tab_idx():
+            menu = QMenu(self)
+            rename_action = QAction("Rename Tab", self)
+            rename_action.triggered.connect(lambda: self._rename_tab(idx))
+            menu.addAction(rename_action)
+            menu.exec(self._wrap_tab_bar.cursor().pos())
 
     # ------------------------------------------------------------------
     # Tab change — intercept "＋" pseudo-tab
@@ -743,11 +881,12 @@ class MainWindow(QMainWindow):
 
     def _on_tab_changed(self, idx: int) -> None:
         if idx == self._plus_tab_idx():
-            # Snap back to previous real tab, then open add dialog
             self._tab_widget.blockSignals(True)
             self._tab_widget.setCurrentIndex(max(0, idx - 1))
             self._tab_widget.blockSignals(False)
             self._add_tab()
+            return
+        self._rebuild_wrap_tab_bar()
 
     # ------------------------------------------------------------------
     # Search
@@ -861,19 +1000,21 @@ class MainWindow(QMainWindow):
     def _add_tab(self):
         name, ok = QInputDialog.getText(self, "New Tab", "Tab name:")
         if not ok or not name.strip():
+            self._rebuild_wrap_tab_bar()
             return
         name = name.strip()
         if name.lower() in [t.name.lower() for t in self._tabs]:
             QMessageBox.warning(self, "Duplicate Tab", f'A tab named "{name}" already exists.')
+            self._rebuild_wrap_tab_bar()
             return
         new_tab = GameTab(name=name)
         self._tabs.append(new_tab)
         grid = GameGrid(new_tab, self)
         self._grids.append(grid)
-        # Insert before the "＋" pseudo-tab
         insert_pos = self._plus_tab_idx()
         self._tab_widget.insertTab(insert_pos, grid, new_tab.name)
         self._tab_widget.setCurrentIndex(insert_pos)
+        self._rebuild_wrap_tab_bar()
         self.save()
 
     def _rename_tab(self, idx: int = -1):
@@ -895,6 +1036,7 @@ class MainWindow(QMainWindow):
             return
         self._tabs[real_idx].name = name
         self._tab_widget.setTabText(idx, name)
+        self._rebuild_wrap_tab_bar()
         self.save()
 
     def _delete_tab(self):
@@ -926,24 +1068,8 @@ class MainWindow(QMainWindow):
             self._tabs.pop(real_idx)
             self._grids.pop(real_idx)
             self._tab_widget.removeTab(idx)
+            self._rebuild_wrap_tab_bar()
             self.save()
-
-    # ------------------------------------------------------------------
-    # Tab reordering — protect index 0 (Favorites) and last (＋)
-    # ------------------------------------------------------------------
-
-    def _on_tab_moved(self, from_idx: int, to_idx: int):
-        plus = self._plus_tab_idx()
-        if from_idx == 0 or to_idx == 0 or from_idx == plus or to_idx == plus:
-            self._tab_widget.tabBar().blockSignals(True)
-            self._tab_widget.tabBar().moveTab(to_idx, from_idx)
-            self._tab_widget.tabBar().blockSignals(False)
-            return
-        real_from = from_idx - 1
-        real_to = to_idx - 1
-        self._tabs.insert(real_to, self._tabs.pop(real_from))
-        self._grids.insert(real_to, self._grids.pop(real_from))
-        self.save()
 
     # ------------------------------------------------------------------
     # Persistence

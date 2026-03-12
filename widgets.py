@@ -423,11 +423,10 @@ class MainWindow(QMainWindow):
             "QToolBar { background: #12122a; border: none; spacing: 6px; padding: 4px; }"
             "QToolBar QToolButton { color: #ccc; padding: 4px 10px; border-radius: 4px; }"
             "QToolBar QToolButton:hover { background: #2a2a3e; }"
-            "QMenu { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #52528a, stop:1 #3e3e6e);"
-            "        color: #ffffff; border: 2px solid #a090ff; }"
+            "QMenu { background-color: #6c5ce7; color: #ffffff; border: 2px solid #a29bfe; }"
             "QMenu::item { padding: 7px 22px; }"
-            "QMenu::item:selected { background-color: #7c6af7; color: #ffffff; }"
-            "QMenu::separator { height: 1px; background: #7070aa; margin: 4px 8px; }"
+            "QMenu::item:selected { background-color: #a29bfe; color: #1a1a2e; }"
+            "QMenu::separator { height: 1px; background: #a29bfe; margin: 4px 8px; }"
         )
 
         self._tabs: List[GameTab] = storage.load()

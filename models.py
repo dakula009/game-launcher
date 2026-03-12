@@ -6,13 +6,14 @@ from typing import List
 class GameItem:
     title: str
     path: str
+    icon_path: str = ""  # path to icon source (exe/dll), used for launcher URLs
 
     def to_dict(self) -> dict:
-        return {"title": self.title, "path": self.path}
+        return {"title": self.title, "path": self.path, "icon_path": self.icon_path}
 
     @classmethod
     def from_dict(cls, data: dict) -> "GameItem":
-        return cls(title=data["title"], path=data["path"])
+        return cls(title=data["title"], path=data["path"], icon_path=data.get("icon_path", ""))
 
 
 @dataclass

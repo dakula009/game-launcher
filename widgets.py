@@ -29,19 +29,28 @@ from models import GameItem, GameTab
 _icon_provider = QFileIconProvider()
 
 
-def _parse_steam_url_file(path: str) -> Optional[str]:
-    """Read a Windows .url file and return the steam:// URL if present."""
+def _parse_url_file(path: str) -> tuple:
+    """Parse a Windows .url file. Returns (url, icon_path) or (None, '') if unsupported.
+
+    Supports any game launcher protocol (steam://, com.epicgames.launcher://, etc.).
+    Skips plain http/https web links.
+    """
+    url = None
+    icon_path = ""
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 line = line.strip()
-                if line.lower().startswith("url="):
-                    url = line[4:]
-                    if url.lower().startswith("steam://"):
-                        return url
+                lline = line.lower()
+                if lline.startswith("url="):
+                    candidate = line[4:]
+                    if not candidate.lower().startswith(("http://", "https://")):
+                        url = candidate
+                elif lline.startswith("iconfile="):
+                    icon_path = line[9:]
     except Exception:
         pass
-    return None
+    return url, icon_path
 
 
 def _make_game_item_from_path(path: str) -> Optional[GameItem]:
@@ -51,9 +60,9 @@ def _make_game_item_from_path(path: str) -> Optional[GameItem]:
     if lower.endswith((".exe", ".lnk")):
         return GameItem(title=title, path=path)
     if lower.endswith(".url"):
-        steam_url = _parse_steam_url_file(path)
-        if steam_url:
-            return GameItem(title=title, path=steam_url)
+        url, icon_path = _parse_url_file(path)
+        if url:
+            return GameItem(title=title, path=url, icon_path=icon_path)
     return None
 
 
@@ -80,28 +89,27 @@ class GameCard(QFrame):
         layout.setContentsMargins(4, 8, 4, 8)
         layout.setSpacing(6)
 
-        # Icon
+        # Icon — prefer icon_path (from .url IconFile=), then path (for .exe/.lnk)
         self._icon_label = QLabel()
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setFixedHeight(52)
-        if not item.path.lower().startswith("steam://"):
-            pixmap = _icon_provider.icon(QFileInfo(item.path)).pixmap(48, 48)
-            if not pixmap.isNull():
-                self._icon_label.setPixmap(pixmap)
-            else:
-                self._icon_label.setText("🎮")
-                self._icon_label.setStyleSheet("font-size: 36px;")
+        icon_source = item.icon_path if item.icon_path else (
+            item.path if "://" not in item.path else ""
+        )
+        pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(48, 48) if icon_source else None
+        if pixmap and not pixmap.isNull():
+            self._icon_label.setPixmap(pixmap)
         else:
             self._icon_label.setText("🎮")
             self._icon_label.setStyleSheet("font-size: 36px;")
         layout.addWidget(self._icon_label)
 
         # Title
-        title_label = QLabel(item.title)
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setWordWrap(True)
-        title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #eee;")
-        layout.addWidget(title_label)
+        self._title_label = QLabel(item.title)
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_label.setWordWrap(True)
+        self._title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #eee;")
+        layout.addWidget(self._title_label)
 
         # Play overlay (child of card, positioned absolutely over the icon area)
         self._play_overlay = QLabel("▶  PLAY", self)
@@ -201,12 +209,22 @@ class GameCard(QFrame):
     # Right-click context menu
     # ------------------------------------------------------------------
 
+    def _rename(self):
+        name, ok = QInputDialog.getText(self, "Rename", "New title:", text=self.item.title)
+        if ok and name.strip():
+            self.item.title = name.strip()
+            self._title_label.setText(name.strip())
+            self.grid.main_window.save()
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         run_action = QAction("▶  Run", self)
         run_action.triggered.connect(lambda: launcher.launch(self.item.path))
         menu.addAction(run_action)
         menu.addSeparator()
+        rename_action = QAction("Rename", self)
+        rename_action.triggered.connect(self._rename)
+        menu.addAction(rename_action)
         remove_action = QAction("Remove", self)
         remove_action.triggered.connect(lambda: self.grid.remove_game(self.item))
         menu.addAction(remove_action)

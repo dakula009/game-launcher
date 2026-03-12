@@ -380,7 +380,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Game Launcher")
+        self.setWindowTitle("My Game Hub")
         self.resize(900, 600)
         self.setStyleSheet(
             "QMainWindow { background: #1a1a2e; }"

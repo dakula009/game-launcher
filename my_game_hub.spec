@@ -35,7 +35,7 @@ exe = EXE(
     a.scripts,
     exclude_binaries=True,
     name='MyGameHub',
-    icon='assets/icon.ico',
+    icon='assets/gamehub.ico',
     console=False,
 )
 coll = COLLECT(

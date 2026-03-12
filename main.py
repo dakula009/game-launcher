@@ -8,7 +8,7 @@ from widgets import MainWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    icon_path = Path(__file__).parent / "assets" / "icon.ico"
+    icon_path = Path(__file__).parent / "assets" / "gamehub.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow()

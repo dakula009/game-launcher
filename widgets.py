@@ -421,7 +421,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("My Game Hub")
         self.resize(900, 600)
-        icon_path = Path(__file__).parent / "assets" / "icon.ico"
+        icon_path = Path(__file__).parent / "assets" / "gamehub.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.setStyleSheet(

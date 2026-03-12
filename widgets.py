@@ -281,8 +281,8 @@ class WrapTabBar(QWidget):
 class AddGameCard(QFrame):
     """Dashed-border '+' card shown at the end of every regular tab."""
 
-    CARD_W = 180
-    CARD_H = 220
+    CARD_W = 130
+    CARD_H = 130
 
     def __init__(self, grid: "GameGrid", parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -332,8 +332,8 @@ class AddGameCard(QFrame):
 # ---------------------------------------------------------------------------
 
 class GameCard(QFrame):
-    CARD_W = 180
-    CARD_H = 220
+    CARD_W = 130
+    CARD_H = 130
     _DRAG_THRESHOLD = 12
 
     def __init__(self, item: GameItem, grid: "GameGrid", parent: Optional[QWidget] = None):
@@ -349,49 +349,49 @@ class GameCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 16, 12, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(8, 10, 8, 8)
+        layout.setSpacing(6)
 
         # Icon
         self._icon_label = QLabel()
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._icon_label.setFixedHeight(90)
+        self._icon_label.setFixedHeight(72)
+        self._icon_label.setStyleSheet("background: transparent;")
         icon_source = item.icon_path if item.icon_path else (
             item.path if "://" not in item.path else ""
         )
-        pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(64, 64) if icon_source else None
+        pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(56, 56) if icon_source else None
         if pixmap and not pixmap.isNull():
             self._icon_label.setPixmap(pixmap)
         else:
             self._icon_label.setText("🎮")
-            self._icon_label.setStyleSheet("font-size: 48px; background: transparent;")
+            self._icon_label.setStyleSheet("font-size: 38px; background: transparent;")
         layout.addWidget(self._icon_label)
-        layout.addStretch()
 
         # Title
         self._title_label = QLabel(item.title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setWordWrap(True)
         self._title_label.setStyleSheet(
-            f"font-size: 13px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
+            f"font-size: 11px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
         )
         layout.addWidget(self._title_label)
 
         # Play overlay — green square centered over icon area
-        overlay_size = 64
+        overlay_size = 48
         ox = (self.CARD_W - overlay_size) // 2
-        oy = 16 + (90 - overlay_size) // 2
+        oy = 10 + (72 - overlay_size) // 2
         self._play_overlay = QLabel("▶", self)
         self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._play_overlay.setStyleSheet(
-            f"background: {GREEN_PLAY}; color: white; font-size: 26px; border-radius: 10px;"
+            f"background: {GREEN_PLAY}; color: white; font-size: 20px; border-radius: 8px;"
         )
         self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()
 
         # Star — bottom-right
         self._star = QLabel(self)
-        self._star.setGeometry(self.CARD_W - 29, self.CARD_H - 29, 27, 27)
+        self._star.setGeometry(self.CARD_W - 24, self.CARD_H - 24, 22, 22)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._refresh_star()
 
@@ -404,10 +404,10 @@ class GameCard(QFrame):
     def _refresh_star(self) -> None:
         if self.item.favorited:
             self._star.setText("★")
-            self._star.setStyleSheet("color: #ffd700; font-size: 20px; background: transparent;")
+            self._star.setStyleSheet("color: #ffd700; font-size: 16px; background: transparent;")
         else:
             self._star.setText("☆")
-            self._star.setStyleSheet(f"color: {TEXT_SEC}; font-size: 20px; background: transparent;")
+            self._star.setStyleSheet(f"color: {TEXT_SEC}; font-size: 16px; background: transparent;")
 
     def sync_star(self) -> None:
         self._refresh_star()

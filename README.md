@@ -18,7 +18,7 @@ Python or installs required, and your library data stays local in
 %APPDATA%\MyGameHub.
 
 Tech: Built with Python + PySide6 (Qt6), packaged with PyInstaller.
-Version: 1.2 | License: MIT
+License: MIT
 
 
 Steps to run the app:

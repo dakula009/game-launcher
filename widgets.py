@@ -6,6 +6,7 @@ from typing import List, Optional
 from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QDrag, QIcon
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFileIconProvider,
     QFrame,
@@ -98,7 +99,13 @@ class SearchPopup(QListWidget):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Popup)
+        # FramelessWindowHint + WA_ShowWithoutActivating = shows without
+        # stealing keyboard focus, so the search bar keeps accepting input.
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.NoDropShadowWindowHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setStyleSheet(
             f"QListWidget {{ background: {BG_TABBAR}; color: {TEXT_PRI}; border: 1px solid {ACCENT};"
@@ -127,11 +134,11 @@ class SearchPopup(QListWidget):
         self.result_selected.emit(li.data(Qt.ItemDataRole.UserRole))
         self.hide()
 
-    def hideEvent(self, event):
-        if not self._picking:
+    def dismiss(self) -> None:
+        if self.isVisible():
+            self._picking = False
+            self.hide()
             self.cancelled.emit()
-        self._picking = False
-        super().hideEvent(event)
 
 
 # ---------------------------------------------------------------------------
@@ -915,6 +922,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._search_popup.cancelled.connect(self._search_bar.clear)
+        # App-level filter: dismiss popup when user clicks anywhere outside it
+        QApplication.instance().installEventFilter(self)
 
     # ------------------------------------------------------------------
     # Build UI
@@ -998,6 +1007,19 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Tab right-click context menu (from WrapTabBar)
     # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event):
+        if (event.type() == QEvent.Type.MouseButtonPress
+                and hasattr(self, '_search_popup')
+                and self._search_popup.isVisible()):
+            gpos = event.globalPosition().toPoint()
+            popup_rect = QRect(
+                self._search_popup.mapToGlobal(QPoint(0, 0)),
+                self._search_popup.size(),
+            )
+            if not popup_rect.contains(gpos):
+                self._search_popup.dismiss()
+        return super().eventFilter(obj, event)
 
     def _on_tabs_reordered(self, from_idx: int, to_idx: int) -> None:
         real_from = from_idx - 1

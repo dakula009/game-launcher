@@ -423,9 +423,9 @@ class MainWindow(QMainWindow):
             "QToolBar { background: #12122a; border: none; spacing: 6px; padding: 4px; }"
             "QToolBar QToolButton { color: #ccc; padding: 4px 10px; border-radius: 4px; }"
             "QToolBar QToolButton:hover { background: #2a2a3e; }"
-            "QMenu { background-color: #f0eeff; color: #1a1a2e; border: 2px solid #a29bfe; }"
-            "QMenu::item { padding: 7px 22px; color: #1a1a2e; }"
-            "QMenu::item:selected { background-color: #7c6af7; color: #ffffff; }"
+            "QMenu { background-color: #6c5ce7; color: #ffffff; border: 2px solid #a29bfe; }"
+            "QMenu::item { padding: 7px 22px; }"
+            "QMenu::item:selected { background-color: #a29bfe; color: #1a1a2e; }"
             "QMenu::separator { height: 1px; background: #a29bfe; margin: 4px 8px; }"
         )
 

@@ -94,6 +94,7 @@ def _make_game_item_from_path(path: str) -> Optional[GameItem]:
 
 class SearchPopup(QListWidget):
     result_selected: Signal = Signal(object)
+    cancelled: Signal = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -106,6 +107,7 @@ class SearchPopup(QListWidget):
             f"QListWidget::item:selected {{ background: {ACCENT}; color: #fff; }}"
             f"QListWidget::item:hover {{ background: {BG_CARD}; }}"
         )
+        self._picking = False
         self.itemClicked.connect(self._on_item_clicked)
 
     def populate(self, results: list, anchor: QWidget) -> None:
@@ -121,8 +123,15 @@ class SearchPopup(QListWidget):
         self.show()
 
     def _on_item_clicked(self, li: QListWidgetItem) -> None:
+        self._picking = True
         self.result_selected.emit(li.data(Qt.ItemDataRole.UserRole))
         self.hide()
+
+    def hideEvent(self, event):
+        if not self._picking:
+            self.cancelled.emit()
+        self._picking = False
+        super().hideEvent(event)
 
 
 # ---------------------------------------------------------------------------
@@ -905,6 +914,7 @@ class MainWindow(QMainWindow):
         self._search_popup.result_selected.connect(self._on_search_result_selected)
 
         self._build_ui()
+        self._search_popup.cancelled.connect(self._search_bar.clear)
 
     # ------------------------------------------------------------------
     # Build UI

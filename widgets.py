@@ -518,7 +518,7 @@ class GameGrid(QScrollArea):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("My Game Hub")
+        self.setWindowTitle("My Game Hub (ver. 1.0)")
         self.resize(900, 600)
         icon_path = Path(__file__).parent / "gamehub.ico"
         if icon_path.exists():

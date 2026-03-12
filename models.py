@@ -6,14 +6,25 @@ from typing import List
 class GameItem:
     title: str
     path: str
-    icon_path: str = ""  # path to icon source (exe/dll), used for launcher URLs
+    icon_path: str = ""
+    favorited: bool = False
 
     def to_dict(self) -> dict:
-        return {"title": self.title, "path": self.path, "icon_path": self.icon_path}
+        return {
+            "title": self.title,
+            "path": self.path,
+            "icon_path": self.icon_path,
+            "favorited": self.favorited,
+        }
 
     @classmethod
     def from_dict(cls, data: dict) -> "GameItem":
-        return cls(title=data["title"], path=data["path"], icon_path=data.get("icon_path", ""))
+        return cls(
+            title=data["title"],
+            path=data["path"],
+            icon_path=data.get("icon_path", ""),
+            favorited=data.get("favorited", False),
+        )
 
 
 @dataclass

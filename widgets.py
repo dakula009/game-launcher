@@ -383,7 +383,7 @@ class GameCard(QFrame):
         self._play_overlay = QLabel("▶", self)
         self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._play_overlay.setStyleSheet(
-            f"background: {GREEN_PLAY}; color: white; font-size: 40px; border-radius: 8px;"
+            f"background: {GREEN_PLAY}; color: white; font-size: 36px; border-radius: 8px;"
         )
         self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()

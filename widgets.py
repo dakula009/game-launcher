@@ -3,14 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QFileInfo, QMimeData, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon
+from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QColor, QDrag, QFont, QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
     QFileIconProvider,
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QSizePolicy,
+    QStackedWidget,
     QTabWidget,
     QToolBar,
     QVBoxLayout,
@@ -33,6 +35,21 @@ from models import GameItem, GameTab
 
 _icon_provider = QFileIconProvider()
 FAVORITES_NAME = "★ Favorites"
+
+# ---------------------------------------------------------------------------
+# Design tokens
+# ---------------------------------------------------------------------------
+BG          = "#0d1117"
+BG_CARD     = "#161f2e"
+BG_HEADER   = "#0d1117"
+BG_TABBAR   = "#131c2e"
+BG_TOOLBAR  = "#0a0f1a"
+ACCENT      = "#3b82f6"
+ACCENT_DARK = "#2563eb"
+TEXT_PRI    = "#f1f5f9"
+TEXT_SEC    = "#64748b"
+BORDER      = "#1e2a3a"
+GREEN_PLAY  = "#22c55e"
 
 
 # ---------------------------------------------------------------------------
@@ -75,20 +92,18 @@ def _make_game_item_from_path(path: str) -> Optional[GameItem]:
 # ---------------------------------------------------------------------------
 
 class SearchPopup(QListWidget):
-    """Floating dropdown that shows search results."""
-
-    result_selected: Signal = Signal(object)  # emits (GameItem, tab_widget_index)
+    result_selected: Signal = Signal(object)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.Popup)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setStyleSheet(
-            "QListWidget { background: #2a2a3e; color: #eee; border: 1px solid #7c6af7;"
-            "              border-radius: 4px; padding: 2px; outline: none; }"
-            "QListWidget::item { padding: 6px 12px; }"
-            "QListWidget::item:selected { background: #7c6af7; color: #fff; }"
-            "QListWidget::item:hover { background: #3a3a5e; }"
+            f"QListWidget {{ background: {BG_TABBAR}; color: {TEXT_PRI}; border: 1px solid {ACCENT};"
+            f"              border-radius: 8px; padding: 4px; outline: none; }}"
+            f"QListWidget::item {{ padding: 8px 14px; border-radius: 6px; }}"
+            f"QListWidget::item:selected {{ background: {ACCENT}; color: #fff; }}"
+            f"QListWidget::item:hover {{ background: {BG_CARD}; }}"
         )
         self.itemClicked.connect(self._on_item_clicked)
 
@@ -100,13 +115,12 @@ class SearchPopup(QListWidget):
             self.addItem(li)
         pos = anchor.mapToGlobal(QPoint(0, anchor.height()))
         w = max(anchor.width(), 320)
-        h = min(len(results) * 32 + 4, 240)
+        h = min(len(results) * 36 + 8, 260)
         self.setGeometry(pos.x(), pos.y(), w, h)
         self.show()
 
     def _on_item_clicked(self, li: QListWidgetItem) -> None:
-        data = li.data(Qt.ItemDataRole.UserRole)
-        self.result_selected.emit(data)
+        self.result_selected.emit(li.data(Qt.ItemDataRole.UserRole))
         self.hide()
 
 
@@ -115,8 +129,8 @@ class SearchPopup(QListWidget):
 # ---------------------------------------------------------------------------
 
 class GameCard(QFrame):
-    CARD_W = 120
-    CARD_H = 140
+    CARD_W = 180
+    CARD_H = 220
     _DRAG_THRESHOLD = 12
 
     def __init__(self, item: GameItem, grid: "GameGrid", parent: Optional[QWidget] = None):
@@ -127,47 +141,54 @@ class GameCard(QFrame):
         self._dragging = False
 
         self.setFixedSize(self.CARD_W, self.CARD_H)
-        self.setFrameShape(QFrame.Shape.Box)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setToolTip(item.path)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 8, 4, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 16, 12, 14)
+        layout.setSpacing(10)
 
         # Icon
         self._icon_label = QLabel()
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._icon_label.setFixedHeight(52)
+        self._icon_label.setFixedHeight(90)
         icon_source = item.icon_path if item.icon_path else (
             item.path if "://" not in item.path else ""
         )
-        pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(48, 48) if icon_source else None
+        pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(64, 64) if icon_source else None
         if pixmap and not pixmap.isNull():
             self._icon_label.setPixmap(pixmap)
         else:
             self._icon_label.setText("🎮")
-            self._icon_label.setStyleSheet("font-size: 36px;")
+            self._icon_label.setStyleSheet("font-size: 48px; background: transparent;")
         layout.addWidget(self._icon_label)
+
+        layout.addStretch()
 
         # Title
         self._title_label = QLabel(item.title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setWordWrap(True)
-        self._title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #eee;")
+        self._title_label.setStyleSheet(
+            f"font-size: 13px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
+        )
         layout.addWidget(self._title_label)
 
-        # Play overlay
-        self._play_overlay = QLabel("▶  PLAY", self)
+        # Play overlay — green square button centered over icon area
+        self._play_overlay = QLabel("▶", self)
         self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._play_overlay.setStyleSheet(
-            "background: rgba(124, 106, 247, 210); color: white;"
-            "font-size: 13px; font-weight: bold; border-radius: 4px;"
+            f"background: {GREEN_PLAY}; color: white; font-size: 26px;"
+            f"border-radius: 10px;"
         )
-        self._play_overlay.setGeometry(4, 8, self.CARD_W - 8, 52)
+        overlay_size = 64
+        ox = (self.CARD_W - overlay_size) // 2
+        oy = 16 + (90 - overlay_size) // 2
+        self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()
 
-        # Star (top-right corner, always visible)
+        # Star — bottom-right corner
         self._star = QLabel(self)
         self._star.setGeometry(self.CARD_W - 29, self.CARD_H - 29, 27, 27)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -185,7 +206,7 @@ class GameCard(QFrame):
             self._star.setStyleSheet("color: #ffd700; font-size: 20px; background: transparent;")
         else:
             self._star.setText("☆")
-            self._star.setStyleSheet("color: #555; font-size: 20px; background: transparent;")
+            self._star.setStyleSheet(f"color: {TEXT_SEC}; font-size: 20px; background: transparent;")
 
     def sync_star(self) -> None:
         self._refresh_star()
@@ -196,7 +217,7 @@ class GameCard(QFrame):
 
     def highlight(self) -> None:
         self.setStyleSheet(
-            "GameCard { background: #3d2e6b; border: 2px solid #fff; border-radius: 6px; }"
+            f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 12px; }}"
         )
         QTimer.singleShot(900, self._set_idle_style)
 
@@ -206,12 +227,12 @@ class GameCard(QFrame):
 
     def _set_idle_style(self):
         self.setStyleSheet(
-            "GameCard { background: #2a2a3e; border: 1px solid #444; border-radius: 6px; }"
+            f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 12px; }}"
         )
 
     def _set_hover_style(self):
         self.setStyleSheet(
-            "GameCard { background: #32324a; border: 2px solid #7c6af7; border-radius: 6px; }"
+            f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 12px; }}"
         )
 
     # ------------------------------------------------------------------
@@ -220,13 +241,14 @@ class GameCard(QFrame):
 
     def enterEvent(self, event):
         effect = QGraphicsDropShadowEffect(self)
-        effect.setBlurRadius(20)
-        effect.setColor(QColor("#7c6af7"))
+        effect.setBlurRadius(24)
+        effect.setColor(QColor(ACCENT))
         effect.setOffset(0, 0)
         self.setGraphicsEffect(effect)
         self._set_hover_style()
         self._play_overlay.show()
         self._play_overlay.raise_()
+        self._star.raise_()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
@@ -236,7 +258,7 @@ class GameCard(QFrame):
         super().leaveEvent(event)
 
     # ------------------------------------------------------------------
-    # Mouse: star click, launch, drag
+    # Mouse
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event):
@@ -299,7 +321,6 @@ class GameCard(QFrame):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-
         run_action = QAction("▶  Run", self)
         run_action.triggered.connect(lambda: launcher.launch(self.item.path))
         menu.addAction(run_action)
@@ -336,7 +357,7 @@ class _DroppableContainer(QWidget):
         super().__init__(parent)
         self._grid = grid
         self.setAcceptDrops(True)
-        self.setStyleSheet("background: #1a1a2e;")
+        self.setStyleSheet(f"background: {BG};")
 
     def dragEnterEvent(self, event):
         self._grid.dragEnterEvent(event)
@@ -372,12 +393,12 @@ class GameGrid(QScrollArea):
         self._cards: List[GameCard] = []
 
         self.setWidgetResizable(True)
-        self.setStyleSheet("background: #1a1a2e; border: none;")
+        self.setStyleSheet(f"background: {BG}; border: none;")
 
         self._container = _DroppableContainer(self)
         self._layout = QGridLayout(self._container)
-        self._layout.setContentsMargins(16, 16, 16, 16)
-        self._layout.setSpacing(12)
+        self._layout.setContentsMargins(20, 20, 20, 20)
+        self._layout.setSpacing(16)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setWidget(self._container)
         self._last_col_count = 0
@@ -393,7 +414,7 @@ class GameGrid(QScrollArea):
             self._rebuild_grid()
 
     def _columns(self) -> int:
-        return max(1, (self.viewport().width() - 16) // (GameCard.CARD_W + 12))
+        return max(1, (self.viewport().width() - 20) // (GameCard.CARD_W + 16))
 
     def _rebuild_grid(self):
         while self._layout.count():
@@ -411,11 +432,7 @@ class GameGrid(QScrollArea):
 
     def add_game(self, item: GameItem) -> bool:
         if any(g.path.lower() == item.path.lower() for g in self.tab.games):
-            QMessageBox.warning(
-                self,
-                "Duplicate Game",
-                f'"{item.title}" is already in this tab.',
-            )
+            QMessageBox.warning(self, "Duplicate Game", f'"{item.title}" is already in this tab.')
             return False
         self.tab.games.append(item)
         self._add_card(item)
@@ -435,10 +452,6 @@ class GameGrid(QScrollArea):
 
     def scroll_to_card(self, card: GameCard) -> None:
         self.ensureWidgetVisible(card)
-
-    # ------------------------------------------------------------------
-    # Drag-and-drop (disabled for favorites)
-    # ------------------------------------------------------------------
 
     def dragEnterEvent(self, event):
         if self.is_favorites:
@@ -507,7 +520,7 @@ class GameGrid(QScrollArea):
         for url in event.mimeData().urls():
             item = _make_game_item_from_path(url.toLocalFile())
             if item:
-                self.add_game(item)  # shows its own warning if duplicate
+                self.add_game(item)
             else:
                 skipped += 1
         event.acceptProposedAction()
@@ -527,39 +540,44 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("My Game Hub (ver. 1.0)")
-        self.resize(900, 600)
+        self.resize(1000, 680)
         icon_path = Path(__file__).parent / "gamehub.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
+
         self.setStyleSheet(
-            "QMainWindow { background: #1a1a2e; }"
-            "QTabWidget::pane { border: none; background: #1a1a2e; }"
-            "QTabWidget::tab-bar { alignment: center; }"
-            "QTabBar::tab { background: #2a2a3e; color: #ccc; padding: 6px 16px;"
-            "               border-radius: 4px 4px 0 0; margin-right: 2px; }"
-            "QTabBar::tab:selected { background: #7c6af7; color: #fff; }"
-            "QTabBar::tab:hover { background: #3a3a5e; }"
-            "QToolBar { background: #12122a; border: none; spacing: 6px; padding: 4px; }"
-            "QToolBar QToolButton { color: #ccc; padding: 4px 10px; border-radius: 4px; }"
-            "QToolBar QToolButton:hover { background: #2a2a3e; }"
-            "QMenu { background-color: #6c5ce7; color: #ffffff;"
-            "        border: 4px solid #7c6af7; border-radius: 6px; }"
-            "QMenu::item { padding: 7px 22px; }"
-            "QMenu::item:selected { background-color: #a29bfe; color: #1a1a2e; }"
-            "QMenu::separator { height: 1px; background: #a29bfe; margin: 4px 8px; }"
-            "QDialog { background: #1a1a2e; color: #eee; }"
-            "QDialog QLabel { color: #eee; }"
-            "QDialog QLineEdit { background: #2a2a3e; color: #eee; border: 1px solid #444;"
-            "                    border-radius: 4px; padding: 4px 8px; }"
-            "QDialog QPushButton { background: #2a2a3e; color: #eee; padding: 4px 14px;"
-            "                      border: 1px solid #444; border-radius: 4px; }"
-            "QDialog QPushButton:hover { background: #7c6af7; color: #fff; border-color: #7c6af7; }"
+            f"QMainWindow {{ background: {BG}; }}"
+            f"QScrollArea {{ background: {BG}; border: none; }}"
+            f"QScrollBar:vertical {{ background: {BG_CARD}; width: 6px; border-radius: 3px; }}"
+            f"QScrollBar::handle:vertical {{ background: #2d4a6e; border-radius: 3px; }}"
+            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
+            f"QToolBar {{ background: {BG_TOOLBAR}; border: none; spacing: 4px; padding: 3px 8px; }}"
+            f"QToolBar QToolButton {{ color: {TEXT_SEC}; padding: 3px 8px; border-radius: 4px;"
+            f"                        font-size: 12px; }}"
+            f"QToolBar QToolButton:hover {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
+            f"QMenu {{ background-color: {BG_TABBAR}; color: {TEXT_PRI};"
+            f"         border: 1px solid {BORDER}; border-radius: 8px; padding: 4px; }}"
+            f"QMenu::item {{ padding: 7px 22px; border-radius: 4px; }}"
+            f"QMenu::item:selected {{ background-color: {ACCENT}; color: #fff; }}"
+            f"QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 8px; }}"
+            f"QDialog {{ background: {BG_TABBAR}; color: {TEXT_PRI}; }}"
+            f"QDialog QLabel {{ color: {TEXT_PRI}; }}"
+            f"QDialog QLineEdit {{ background: {BG_CARD}; color: {TEXT_PRI}; border: 1px solid {BORDER};"
+            f"                    border-radius: 6px; padding: 4px 8px; }}"
+            f"QDialog QPushButton {{ background: {BG_CARD}; color: {TEXT_PRI}; padding: 4px 14px;"
+            f"                       border: 1px solid {BORDER}; border-radius: 6px; }}"
+            f"QDialog QPushButton:hover {{ background: {ACCENT}; color: #fff; border-color: {ACCENT}; }}"
+            f"QTabWidget::pane {{ border: none; background: {BG}; }}"
+            f"QTabBar {{ background: transparent; }}"
+            f"QTabBar::tab {{ background: transparent; color: {TEXT_SEC}; padding: 8px 20px;"
+            f"                border-radius: 20px; margin: 4px 3px; font-size: 13px; }}"
+            f"QTabBar::tab:selected {{ background: {ACCENT}; color: #fff; font-weight: bold; }}"
+            f"QTabBar::tab:hover:!selected {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
         )
 
         self._tabs: List[GameTab] = storage.load()
         self._grids: List[GameGrid] = []
 
-        # Build favorites tab from favorited flags across all regular tabs
         self._favorites_tab = GameTab(
             name=FAVORITES_NAME,
             games=[g for tab in self._tabs for g in tab.games if g.favorited],
@@ -571,65 +589,137 @@ class MainWindow(QMainWindow):
         self._tab_widget.setMovable(True)
         self._tab_widget.tabBar().tabMoved.connect(self._on_tab_moved)
         self._tab_widget.tabBar().installEventFilter(self)
-        self.setCentralWidget(self._tab_widget)
+        self._tab_widget.setStyleSheet(
+            f"QTabWidget::pane {{ border: none; background: {BG}; margin-top: 0; }}"
+            f"QTabBar::tab {{ background: transparent; color: {TEXT_SEC}; padding: 8px 22px;"
+            f"                border-radius: 20px; margin: 4px 3px; font-size: 13px; }}"
+            f"QTabBar::tab:selected {{ background: {ACCENT}; color: #fff; font-weight: bold; }}"
+            f"QTabBar::tab:hover:!selected {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
+        )
 
         self._search_popup = SearchPopup()
         self._search_popup.result_selected.connect(self._on_search_result_selected)
 
-        self._build_toolbar()
-        self._populate_tabs()
+        self._build_ui()
 
     # ------------------------------------------------------------------
-    # Setup
+    # Build UI
     # ------------------------------------------------------------------
 
-    def _build_toolbar(self):
+    def _build_ui(self):
+        # Toolbar (management actions — slim, secondary)
         toolbar = QToolBar("Actions")
+        toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        add_game_action = QAction("+ Add Game", self)
-        add_game_action.triggered.connect(self._add_game_via_dialog)
-        toolbar.addAction(add_game_action)
+        for label, slot in [
+            ("+ Add Game", self._add_game_via_dialog),
+            ("+ Add Tab",  self._add_tab),
+            ("Rename Tab", self._rename_tab),
+            ("Delete Tab", self._delete_tab),
+            ("About",      self._show_about),
+        ]:
+            action = QAction(label, self)
+            action.triggered.connect(slot)
+            toolbar.addAction(action)
 
-        toolbar.addSeparator()
+        # Central container
+        central = QWidget()
+        central.setStyleSheet(f"background: {BG};")
+        vbox = QVBoxLayout(central)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
 
-        add_tab_action = QAction("+ Add Tab", self)
-        add_tab_action.triggered.connect(self._add_tab)
-        toolbar.addAction(add_tab_action)
+        # --- Header ---
+        header = QWidget()
+        header.setFixedHeight(110)
+        header.setStyleSheet(f"background: {BG_HEADER};")
+        grid = QGridLayout(header)
+        grid.setContentsMargins(24, 0, 24, 0)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 0)
+        grid.setColumnStretch(2, 1)
 
-        rename_tab_action = QAction("Rename Tab", self)
-        rename_tab_action.triggered.connect(self._rename_tab)
-        toolbar.addAction(rename_tab_action)
+        # Center: icon + title + subtitle
+        center = QWidget()
+        center.setStyleSheet("background: transparent;")
+        center_vbox = QVBoxLayout(center)
+        center_vbox.setContentsMargins(0, 0, 0, 0)
+        center_vbox.setSpacing(4)
 
-        delete_tab_action = QAction("Delete Tab", self)
-        delete_tab_action.triggered.connect(self._delete_tab)
-        toolbar.addAction(delete_tab_action)
+        title_row = QWidget()
+        title_row.setStyleSheet("background: transparent;")
+        title_hbox = QHBoxLayout(title_row)
+        title_hbox.setContentsMargins(0, 0, 0, 0)
+        title_hbox.setSpacing(10)
+        title_hbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self._show_about)
-        toolbar.addAction(about_action)
+        icon_lbl = QLabel("🎮")
+        icon_lbl.setStyleSheet("font-size: 30px; background: transparent;")
+        title_lbl = QLabel("My Game Hub")
+        title_lbl.setStyleSheet(
+            f"color: {TEXT_PRI}; font-size: 26px; font-weight: bold; background: transparent;"
+        )
+        title_hbox.addWidget(icon_lbl)
+        title_hbox.addWidget(title_lbl)
 
-        # Push search bar to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toolbar.addWidget(spacer)
+        sub_lbl = QLabel("Your personal gaming collection")
+        sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_lbl.setStyleSheet(f"color: {TEXT_SEC}; font-size: 13px; background: transparent;")
+
+        center_vbox.addStretch()
+        center_vbox.addWidget(title_row)
+        center_vbox.addWidget(sub_lbl)
+        center_vbox.addStretch()
+
+        # Right: search bar
+        search_container = QWidget()
+        search_container.setStyleSheet("background: transparent;")
+        search_hbox = QHBoxLayout(search_container)
+        search_hbox.setContentsMargins(0, 0, 0, 0)
+        search_hbox.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self._search_bar = QLineEdit()
-        self._search_bar.setPlaceholderText("🔍  Search games...")
-        self._search_bar.setFixedWidth(200)
+        self._search_bar.setPlaceholderText("🔍  Search game...")
+        self._search_bar.setFixedWidth(220)
+        self._search_bar.setFixedHeight(36)
         self._search_bar.setStyleSheet(
-            "QLineEdit { background: #2a2a3e; color: #eee; border: 1px solid #444;"
-            "            border-radius: 4px; padding: 4px 8px; }"
-            "QLineEdit:focus { border-color: #7c6af7; }"
+            f"QLineEdit {{ background: {BG_TABBAR}; color: {TEXT_PRI}; border: 1px solid {BORDER};"
+            f"            border-radius: 18px; padding: 4px 16px; font-size: 13px; }}"
+            f"QLineEdit:focus {{ border-color: {ACCENT}; }}"
         )
         self._search_bar.textChanged.connect(self._on_search_text_changed)
-        toolbar.addWidget(self._search_bar)
+        search_hbox.addWidget(self._search_bar)
+
+        grid.addWidget(QWidget(), 0, 0)  # left spacer
+        grid.addWidget(center, 0, 1, Qt.AlignmentFlag.AlignCenter)
+        grid.addWidget(search_container, 0, 2)
+
+        # --- Tab bar wrapper (rounded pill container) ---
+        tab_bar_wrapper = QWidget()
+        tab_bar_wrapper.setStyleSheet(
+            f"background: {BG_TABBAR}; border-radius: 14px; margin: 0px 20px 0px 20px;"
+        )
+        tab_bar_wrapper.setFixedHeight(56)
+        wrapper_hbox = QHBoxLayout(tab_bar_wrapper)
+        wrapper_hbox.setContentsMargins(8, 0, 8, 0)
+        wrapper_hbox.addWidget(self._tab_widget.tabBar(), 0, Qt.AlignmentFlag.AlignVCenter)
+
+        vbox.addWidget(header)
+        vbox.addSpacing(12)
+        vbox.addWidget(tab_bar_wrapper)
+        vbox.addSpacing(4)
+        vbox.addWidget(self._tab_widget)
+
+        self._tab_widget.tabBar().setParent(tab_bar_wrapper)
+
+        self.setCentralWidget(central)
+        self._populate_tabs()
 
     def eventFilter(self, obj, event):
-        from PySide6.QtCore import QEvent
         if obj is self._tab_widget.tabBar() and event.type() == QEvent.Type.ContextMenu:
             idx = self._tab_widget.tabBar().tabAt(event.pos())
-            if idx > 0:  # 0 is Favorites — protected
+            if idx > 0:
                 menu = QMenu(self)
                 rename_action = QAction("Rename Tab", self)
                 rename_action.triggered.connect(lambda: self._rename_tab(idx))
@@ -642,7 +732,6 @@ class MainWindow(QMainWindow):
         self._tab_widget.clear()
         self._grids.clear()
 
-        # Favorites always first, pinned
         self._favorites_grid = GameGrid(self._favorites_tab, self, is_favorites=True)
         self._tab_widget.addTab(self._favorites_grid, FAVORITES_NAME)
 
@@ -664,7 +753,7 @@ class MainWindow(QMainWindow):
         for i, (tab, grid) in enumerate(zip(self._tabs, self._grids)):
             for item in tab.games:
                 if text in item.title.lower():
-                    results.append((item, tab.name, i + 1))  # +1: offset for favorites tab
+                    results.append((item, tab.name, i + 1))
         if results:
             self._search_popup.populate(results, self._search_bar)
         else:
@@ -705,7 +794,6 @@ class MainWindow(QMainWindow):
                     self._favorites_tab.games.remove(item)
                 self._favorites_grid._rebuild_grid()
 
-        # Sync star on all cards showing this item
         for grid in self._grids:
             for c in grid._cards:
                 if c.item is item:
@@ -717,7 +805,6 @@ class MainWindow(QMainWindow):
         self.save()
 
     def _sync_card_titles(self, item: GameItem) -> None:
-        """Refresh title label on every card referencing this item."""
         for grid in [self._favorites_grid] + self._grids:
             for card in grid._cards:
                 if card.item is item:
@@ -740,16 +827,11 @@ class MainWindow(QMainWindow):
     def _add_game_via_dialog(self):
         idx = self._tab_widget.currentIndex()
         if idx == 0:
-            QMessageBox.information(
-                self, "Favorites", "Switch to a regular tab to add games."
-            )
+            QMessageBox.information(self, "Favorites", "Switch to a regular tab to add games.")
             return
         real_idx = idx - 1
         paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Select Game Executable or Shortcut",
-            "",
-            "Games (*.exe *.lnk *.url)",
+            self, "Select Game Executable or Shortcut", "", "Games (*.exe *.lnk *.url)",
         )
         skipped = 0
         for path in paths:
@@ -760,8 +842,7 @@ class MainWindow(QMainWindow):
                 skipped += 1
         if skipped:
             QMessageBox.warning(
-                self,
-                "Unsupported file",
+                self, "Unsupported file",
                 f"{skipped} file(s) skipped. Only .exe, .lnk, and Steam .url files are supported.",
             )
 
@@ -814,13 +895,11 @@ class MainWindow(QMainWindow):
         real_idx = idx - 1
         tab = self._tabs[real_idx]
         reply = QMessageBox.question(
-            self,
-            "Delete Tab",
+            self, "Delete Tab",
             f'Delete tab "{tab.name}" and all its games?',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            # Remove any favorited games in this tab from the favorites grid
             for item in list(tab.games):
                 if item.favorited:
                     item.favorited = False
@@ -840,12 +919,11 @@ class MainWindow(QMainWindow):
             self.save()
 
     # ------------------------------------------------------------------
-    # Tab reordering — favorites at index 0 is pinned
+    # Tab reordering
     # ------------------------------------------------------------------
 
     def _on_tab_moved(self, from_idx: int, to_idx: int):
         if from_idx == 0 or to_idx == 0:
-            # Snap favorites back to position 0
             self._tab_widget.tabBar().blockSignals(True)
             self._tab_widget.tabBar().moveTab(to_idx, from_idx)
             self._tab_widget.tabBar().blockSignals(False)
@@ -857,7 +935,7 @@ class MainWindow(QMainWindow):
         self.save()
 
     # ------------------------------------------------------------------
-    # Persistence — saves only regular tabs; favorites rebuilt on load
+    # Persistence
     # ------------------------------------------------------------------
 
     def save(self):

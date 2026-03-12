@@ -1,10 +1,11 @@
 import json
+import os
 from pathlib import Path
 from typing import List
 
 from models import GameTab
 
-DATA_FILE = Path(__file__).parent / "data" / "library.json"
+DATA_FILE = Path(os.environ.get("APPDATA", Path.home())) / "MyGameHub" / "library.json"
 
 DEFAULT_TAB_NAMES = ["RTS", "RPG", "FPS", "Other"]
 

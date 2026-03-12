@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from pathlib import Path
+
 from PySide6.QtCore import QFileInfo, QMimeData, QPoint, Qt
-from PySide6.QtGui import QAction, QColor, QDrag
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
     QFileIconProvider,
@@ -419,6 +421,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("My Game Hub")
         self.resize(900, 600)
+        icon_path = Path(__file__).parent / "assets" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.setStyleSheet(
             "QMainWindow { background: #1a1a2e; }"
             "QTabWidget::pane { border: none; background: #1a1a2e; }"

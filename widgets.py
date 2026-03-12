@@ -169,7 +169,7 @@ class GameCard(QFrame):
 
         # Star (top-right corner, always visible)
         self._star = QLabel(self)
-        self._star.setGeometry(self.CARD_W - 22, self.CARD_H - 22, 18, 18)
+        self._star.setGeometry(self.CARD_W - 29, self.CARD_H - 29, 27, 27)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._refresh_star()
 
@@ -182,10 +182,10 @@ class GameCard(QFrame):
     def _refresh_star(self) -> None:
         if self.item.favorited:
             self._star.setText("★")
-            self._star.setStyleSheet("color: #ffd700; font-size: 13px; background: transparent;")
+            self._star.setStyleSheet("color: #ffd700; font-size: 20px; background: transparent;")
         else:
             self._star.setText("☆")
-            self._star.setStyleSheet("color: #555; font-size: 13px; background: transparent;")
+            self._star.setStyleSheet("color: #555; font-size: 20px; background: transparent;")
 
     def sync_star(self) -> None:
         self._refresh_star()

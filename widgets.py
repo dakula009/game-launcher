@@ -1067,7 +1067,11 @@ class MainWindow(QMainWindow):
             self._favorites_grid._rebuild_grid()
             self._tabs.pop(real_idx)
             self._grids.pop(real_idx)
+            self._tab_widget.blockSignals(True)
             self._tab_widget.removeTab(idx)
+            new_idx = max(0, idx - 1)
+            self._tab_widget.setCurrentIndex(new_idx)
+            self._tab_widget.blockSignals(False)
             self._rebuild_wrap_tab_bar()
             self.save()
 

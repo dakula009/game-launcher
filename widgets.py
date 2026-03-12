@@ -639,12 +639,13 @@ class MainWindow(QMainWindow):
         self._tab_widget.setMovable(True)
         self._tab_widget.setStyleSheet(
             f"QTabWidget::pane {{ border: none; background: {BG}; }}"
-            f"QTabWidget::tab-bar {{ alignment: left; }}"
-            f"QTabBar {{ background: {BG_TABBAR}; border-radius: 0; }}"
-            f"QTabBar::tab {{ background: transparent; color: {TEXT_SEC}; padding: 9px 24px;"
-            f"                border-radius: 100px; margin: 5px 3px; font-size: 13px;"
-            f"                min-width: 60px; }}"
-            f"QTabBar::tab:selected {{ background: {ACCENT}; color: #fff; font-weight: bold; }}"
+            f"QTabWidget::tab-bar {{ alignment: center; }}"
+            f"QTabBar {{ background: transparent; }}"
+            f"QTabBar::tab {{ background: {BG_TABBAR}; color: {TEXT_SEC}; padding: 8px 22px;"
+            f"                border-radius: 8px; margin: 5px 4px; font-size: 13px;"
+            f"                min-width: 60px; border: 1px solid {BORDER}; }}"
+            f"QTabBar::tab:selected {{ background: {ACCENT}; color: #fff; font-weight: bold;"
+            f"                         border-color: {ACCENT}; }}"
             f"QTabBar::tab:hover:!selected {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
         )
         self._tab_widget.tabBar().tabMoved.connect(self._on_tab_moved)

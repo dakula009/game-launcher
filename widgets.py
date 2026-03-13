@@ -741,7 +741,7 @@ class GameCard(QFrame):
                 scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
             self._cover_label.setPixmap(_round_pixmap(scaled, 18))
             self._cover_label.setText("")
-            self._cover_label.setStyleSheet("background: transparent;")
+            self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()
 
     def _apply_nonsteam_cover_art(self, cache_path: str):
@@ -758,7 +758,7 @@ class GameCard(QFrame):
             cropped = scaled.copy(x, y, self.CARD_W, self.CARD_H)
             self._cover_label.setPixmap(_round_pixmap(cropped, 18))
             self._cover_label.setText("")
-            self._cover_label.setStyleSheet("background: transparent;")
+            self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()
 
     def _on_artwork_ready(self, app_id: str, cache_path: str):

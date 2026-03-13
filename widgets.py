@@ -78,6 +78,46 @@ class ArtworkDownloader(QThread):
             pass  # silently fall back to icon
 
 
+class LnkIconResolver(QThread):
+    """Batch-resolves .lnk shortcuts to target .exe paths via one PowerShell process.
+
+    Emits resolved(item, exe_path) for each successful resolution.
+    Results should be stored permanently in item.icon_path so this only
+    ever runs once per game.
+    """
+    resolved = Signal(object, str)   # (GameItem, exe_path)
+
+    def __init__(self, items: list):
+        super().__init__()
+        self._items = items  # list of GameItem whose path ends with .lnk
+
+    def run(self):
+        import sys
+        if sys.platform != "win32" or not self._items:
+            return
+        import subprocess
+        paths = [item.path for item in self._items]
+        # One PowerShell expression per path; outputs one resolved path per line
+        ps_lines = [
+            "try{(New-Object -COM WScript.Shell).CreateShortcut("
+            + repr(p)
+            + ").TargetPath}catch{''}"
+            for p in paths
+        ]
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden",
+                 "-Command", "; ".join(ps_lines)],
+                capture_output=True, text=True, timeout=15,
+            )
+            for item, target in zip(self._items, r.stdout.splitlines()):
+                target = target.strip()
+                if target and os.path.exists(target):
+                    self.resolved.emit(item, target)
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Design tokens
 # ---------------------------------------------------------------------------
@@ -97,77 +137,6 @@ GREEN_PLAY  = "#22c55e"
 # Helpers
 # ---------------------------------------------------------------------------
 
-_lnk_target_cache: dict = {}
-
-
-def _resolve_lnk_target(lnk_path: str) -> str:
-    """Parse a .lnk binary to extract the target path (avoids shortcut arrow in icon).
-
-    MS-SHLLINK LinkInfo field layout (all offsets from start of LinkInfo block):
-      +0  LinkInfoSize          (total structure size)
-      +4  LinkInfoHeaderSize    (header size; Unicode fields present when >= 0x24)
-      +8  LinkInfoFlags         (bit 0 = VolumeIDAndLocalBasePath)
-      +12 VolumeIDOffset
-      +16 LocalBasePathOffset   (ASCII target path)
-      +20 CommonNetworkRelativeLinkOffset
-      +24 CommonPathSuffixOffset
-      +28 LocalBasePathOffsetUnicode  (only when LinkInfoHeaderSize >= 0x24)
-
-    Tries Unicode first (modern shortcuts), falls back to ASCII.
-    Returns original lnk_path on any failure so callers always get a usable string.
-    """
-    if lnk_path in _lnk_target_cache:
-        return _lnk_target_cache[lnk_path]
-    target = lnk_path
-    try:
-        import struct
-        with open(lnk_path, "rb") as f:
-            data = f.read()
-        if len(data) < 76:
-            raise ValueError("too short")
-
-        # Shell Link Header: LinkFlags at offset 20
-        link_flags    = struct.unpack_from("<I", data, 20)[0]
-        has_idlist    = bool(link_flags & 0x01)
-        has_link_info = bool(link_flags & 0x02)
-
-        offset = 76  # skip the 76-byte Shell Link Header
-
-        if has_idlist:
-            idlist_size = struct.unpack_from("<H", data, offset)[0]
-            offset += 2 + idlist_size
-
-        if has_link_info:
-            # Read LinkInfoHeaderSize (+4) and LinkInfoFlags (+8)
-            li_header_size = struct.unpack_from("<I", data, offset + 4)[0]
-            li_flags       = struct.unpack_from("<I", data, offset + 8)[0]
-
-            if li_flags & 0x01:  # VolumeIDAndLocalBasePath present
-                # Unicode path at +28 (requires LinkInfoHeaderSize >= 0x24 = 36)
-                if li_header_size >= 0x24:
-                    unicode_off = struct.unpack_from("<I", data, offset + 28)[0]
-                    if unicode_off:
-                        ps = offset + unicode_off
-                        pe = ps
-                        while pe + 1 < len(data) and not (data[pe] == 0 and data[pe + 1] == 0):
-                            pe += 2
-                        candidate = data[ps:pe].decode("utf-16-le", errors="ignore")
-                        if candidate and os.path.exists(candidate):
-                            target = candidate
-
-                # ASCII fallback: LocalBasePathOffset at +16
-                if target == lnk_path:
-                    ascii_off = struct.unpack_from("<I", data, offset + 16)[0]
-                    if ascii_off:
-                        ps = offset + ascii_off
-                        pe = data.index(b"\x00", ps)
-                        candidate = data[ps:pe].decode("latin-1", errors="ignore")
-                        if candidate and os.path.exists(candidate):
-                            target = candidate
-    except Exception:
-        pass
-    _lnk_target_cache[lnk_path] = target
-    return target
 
 
 def _parse_url_file(path: str) -> tuple:
@@ -602,13 +571,11 @@ class GameCard(QFrame):
         self._icon_label.setFixedHeight(72)
         self._icon_label.setStyleSheet("background: transparent;")
         if self.item.icon_path:
-            icon_source = self.item.icon_path
-        elif self.item.path.lower().endswith(".lnk"):
-            icon_source = _resolve_lnk_target(self.item.path)
-        elif "://" not in self.item.path:
-            icon_source = self.item.path
+            icon_source = self.item.icon_path          # resolved exe path (permanent)
+        elif "://" not in self.item.path and not self.item.path.lower().endswith(".lnk"):
+            icon_source = self.item.path               # direct .exe — clean icon
         else:
-            icon_source = ""
+            icon_source = ""                           # .lnk not yet resolved → emoji
         pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(56, 56) if icon_source else None
         if pixmap and not pixmap.isNull():
             self._icon_label.setPixmap(pixmap)
@@ -1175,6 +1142,7 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(container)
         self._populate_tabs()
+        QTimer.singleShot(0, self._resolve_lnk_icons)
 
     def _populate_tabs(self):
         self._tab_widget.blockSignals(True)
@@ -1334,6 +1302,26 @@ class MainWindow(QMainWindow):
             if card:
                 grid._refresh_card(card)
 
+    def _resolve_lnk_icons(self):
+        """Start background resolver for .lnk games that have no icon_path yet."""
+        pending = [
+            item
+            for tab in self._tabs
+            for item in tab.games
+            if item.path.lower().endswith(".lnk") and not item.icon_path
+        ]
+        if not pending:
+            return
+        self._lnk_resolver = LnkIconResolver(pending)
+        self._lnk_resolver.resolved.connect(self._on_lnk_resolved)
+        self._lnk_resolver.start()
+
+    def _on_lnk_resolved(self, item: GameItem, exe_path: str):
+        """Store the resolved exe path permanently and refresh the card."""
+        item.icon_path = exe_path
+        self.save()
+        self._refresh_card_everywhere(item)
+
     # ------------------------------------------------------------------
     # Game management
     # ------------------------------------------------------------------
@@ -1357,12 +1345,17 @@ class MainWindow(QMainWindow):
             self, "Select Game Executable or Shortcut", "", "Games (*.exe *.lnk *.url)",
         )
         skipped = 0
+        added_lnk = False
         for path in paths:
             item = _make_game_item_from_path(path)
             if item:
                 self._grids[real_idx].add_game(item)
+                if path.lower().endswith(".lnk"):
+                    added_lnk = True
             else:
                 skipped += 1
+        if added_lnk:
+            QTimer.singleShot(0, self._resolve_lnk_icons)
         if skipped:
             QMessageBox.warning(
                 self, "Unsupported file",

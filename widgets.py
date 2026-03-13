@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 import hashlib
+import math
 import re
 
 import launcher
@@ -590,6 +591,62 @@ class AddGameCard(QFrame):
 
 
 # ---------------------------------------------------------------------------
+# Star widget (rounded shape)
+# ---------------------------------------------------------------------------
+
+class StarWidget(QWidget):
+    """Draws a soft rounded star using bezier-curved points."""
+    _OUTER_R = 10
+    _INNER_R = 5
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._favorited = False
+        self.setFixedSize(26, 26)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+    def set_favorited(self, favorited: bool):
+        self._favorited = favorited
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = self._star_path(13, 13, self._OUTER_R, self._INNER_R)
+        if self._favorited:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.fillPath(path, QColor("#ffd700"))
+        else:
+            pen = QPen(QColor("#e2e8f0"))
+            pen.setWidthF(1.5)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+
+    @staticmethod
+    def _star_path(cx: float, cy: float, r_outer: float, r_inner: float, points: int = 5) -> QPainterPath:
+        """Build a rounded star path using midpoint quadratic bezier curves."""
+        n = points * 2
+        verts = []
+        for i in range(n):
+            angle = math.pi / points * i - math.pi / 2
+            r = r_outer if i % 2 == 0 else r_inner
+            verts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+
+        def mid(a, b):
+            return ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+
+        path = QPainterPath()
+        start = mid(verts[-1], verts[0])
+        path.moveTo(*start)
+        for i in range(n):
+            v = verts[i]
+            nv = verts[(i + 1) % n]
+            path.quadTo(v[0], v[1], *mid(v, nv))
+        path.closeSubpath()
+        return path
+
+
 # Game card
 # ---------------------------------------------------------------------------
 
@@ -628,9 +685,8 @@ class GameCard(QFrame):
         self._search_highlight.hide()
 
         # Star — top-right (always present, above highlight overlay)
-        self._star = QLabel(self)
+        self._star = StarWidget(self)
         self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
-        self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._refresh_star()
 
         self.artwork_updated.connect(lambda _: self.grid.main_window.save())
@@ -855,12 +911,7 @@ class GameCard(QFrame):
     # ------------------------------------------------------------------
 
     def _refresh_star(self) -> None:
-        if self.item.favorited:
-            self._star.setText("★")
-            self._star.setStyleSheet("color: #ffd700; font-size: 19px; background: transparent;")
-        else:
-            self._star.setText("☆")
-            self._star.setStyleSheet("color: #e2e8f0; font-size: 19px; background: transparent;")
+        self._star.set_favorited(self.item.favorited)
 
     def sync_star(self) -> None:
         self._refresh_star()

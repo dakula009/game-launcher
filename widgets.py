@@ -1452,15 +1452,16 @@ class MainWindow(QMainWindow):
         item, tab_widget_idx = data
         self._search_bar.clear()
         self._tab_widget.setCurrentIndex(tab_widget_idx)
+        # Flush all pending layout/resize events so the scroll area geometry
+        # is fully settled before we try to scroll and highlight.
+        QApplication.processEvents()
         real_idx = tab_widget_idx - 1
         if 0 <= real_idx < len(self._grids):
             grid = self._grids[real_idx]
-            def _scroll_and_highlight():
-                card = next((c for c in grid._cards if c.item is item), None)
-                if card:
-                    grid.scroll_to_card(card)
-                    card.highlight()
-            QTimer.singleShot(50, _scroll_and_highlight)
+            card = next((c for c in grid._cards if c.item is item), None)
+            if card:
+                grid.scroll_to_card(card)
+                card.highlight()
 
     # ------------------------------------------------------------------
     # Favorites

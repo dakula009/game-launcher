@@ -709,6 +709,7 @@ class GameCard(QFrame):
         self._title_overlay.setStyleSheet(
             f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
             f" font-size: 12px; font-weight: bold; padding: 2px 4px;"
+            f" border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;"
         )
         self._title_label = self._title_overlay  # alias for _sync_card_titles
 
@@ -822,6 +823,7 @@ class GameCard(QFrame):
         self._title_overlay.setStyleSheet(
             f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
             f" font-size: 12px; font-weight: bold; padding: 2px 4px;"
+            f" border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;"
         )
         self._title_label = self._title_overlay
 

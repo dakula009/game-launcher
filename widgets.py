@@ -65,10 +65,10 @@ def _artwork_cache_path(app_id: str) -> Path:
     return _ARTWORK_DIR / f"{app_id}.jpg"
 
 
-def _round_pixmap(pixmap: QPixmap, radius: int, bg: str = "#161f2e") -> QPixmap:
-    """Return a new opaque pixmap with rounded corners filled with *bg* color."""
+def _round_pixmap(pixmap: QPixmap, radius: int) -> QPixmap:
+    """Return a new pixmap with rounded corners; corner pixels are deleted (alpha=0)."""
     result = QPixmap(pixmap.size())
-    result.fill(QColor(bg))
+    result.fill(Qt.GlobalColor.transparent)
     painter = QPainter(result)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     path = QPainterPath()
@@ -694,6 +694,7 @@ class GameCard(QFrame):
     def _build_steam_ui(self, app_id: str):
         # Cover art label fills the card
         self._cover_label = QLabel(self)
+        self._cover_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._cover_label.setGeometry(0, 0, self.CARD_W, self.CARD_H)
         self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._cover_label.setText("🎮")
@@ -806,6 +807,7 @@ class GameCard(QFrame):
 
         # Create cover art label filling the card
         self._cover_label = QLabel(self)
+        self._cover_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._cover_label.setGeometry(0, 0, self.CARD_W, self.CARD_H)
         self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._cover_label.setText("🎮")

@@ -20,7 +20,7 @@ build.bat
 
 Output is `dist\MyGameHub\` — a folder containing `MyGameHub.exe` and all bundled DLLs. After PyInstaller finishes, `build.bat` copies Qt6 DLLs from the conda env into the dist folder to fix ordinal mismatch errors that occur with PySide6 in conda environments.
 
-The PyInstaller spec is `my_game_hub.spec`. The Inno Setup script `installer.iss` can produce a full Windows installer from the dist folder, but is not part of the regular build workflow yet. Current app version is **1.3**.
+The PyInstaller spec is `my_game_hub.spec`. The Inno Setup script `installer.iss` can produce a full Windows installer from the dist folder, but is not part of the regular build workflow yet. Current app version is **1.4**.
 
 To uninstall, run `uninstall.bat` — it removes `%APPDATA%\MyGameHub\` and the app folder after confirmation.
 

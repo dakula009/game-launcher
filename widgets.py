@@ -1334,7 +1334,7 @@ class SettingsDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("My Game Hub (ver. 1.3)")
+        self.setWindowTitle("My Game Hub (ver. 1.4)")
         self.resize(1400, 720)
         icon_path = Path(__file__).parent / "gamehub.ico"
         if icon_path.exists():
@@ -1630,7 +1630,7 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         QMessageBox.information(
             self, "About",
-            "My Game Hub (ver. 1.3)\n\n"
+            "My Game Hub (ver. 1.4)\n\n"
             "A personal game launcher for organizing and launching your game library.\n\n"
             "© 2026 RL. All rights reserved.\n"
             "Contact: kula009@gmail.com",

@@ -411,8 +411,8 @@ class WrapTabBar(QWidget):
             display = name.replace("★", "").strip() if is_fav else name
             btn = QPushButton(display)
             if is_fav:
-                btn.setIcon(QIcon(_make_star_pixmap(14, "#f5d060")))
-                btn.setIconSize(QSize(14, 14))
+                btn.setIcon(QIcon(_make_star_pixmap(10, "#f5d060")))
+                btn.setIconSize(QSize(10, 10))
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._style_btn(btn, is_selected, is_plus, is_favorites=is_fav)
             btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
@@ -601,13 +601,13 @@ class AddGameCard(QFrame):
 
 class StarWidget(QWidget):
     """Draws a rounded star using bezier-curved points."""
-    _OUTER_R = 10
-    _INNER_R = 5.5
+    _OUTER_R = 7
+    _INNER_R = 3.85
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._favorited = False
-        self.setFixedSize(26, 26)
+        self.setFixedSize(18, 18)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
     def set_favorited(self, favorited: bool):
@@ -617,7 +617,7 @@ class StarWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = self._star_path(13, 13, self._OUTER_R, self._INNER_R)
+        path = self._star_path(9, 9, self._OUTER_R, self._INNER_R)
         if self._favorited:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.fillPath(path, QColor("#ffd700"))
@@ -708,7 +708,7 @@ class GameCard(QFrame):
 
         # Star — top-right (always present, above highlight overlay)
         self._star = StarWidget(self)
-        self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
+        self._star.setGeometry(self.CARD_W - 22, 4, 18, 18)
         self._refresh_star()
 
         self.artwork_updated.connect(lambda _: self.grid.main_window.save())

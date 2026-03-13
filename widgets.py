@@ -97,6 +97,42 @@ GREEN_PLAY  = "#22c55e"
 # Helpers
 # ---------------------------------------------------------------------------
 
+_lnk_target_cache: dict = {}
+
+
+def _resolve_lnk_target(lnk_path: str) -> str:
+    """Parse a .lnk binary to extract the target path (avoids shortcut arrow in icon)."""
+    if lnk_path in _lnk_target_cache:
+        return _lnk_target_cache[lnk_path]
+    target = lnk_path
+    try:
+        import struct
+        with open(lnk_path, "rb") as f:
+            data = f.read()
+        if len(data) < 76:
+            raise ValueError("too short")
+        link_flags = struct.unpack_from("<I", data, 20)[0]
+        has_idlist = bool(link_flags & 0x01)
+        has_link_info = bool(link_flags & 0x02)
+        offset = 76
+        if has_idlist:
+            idlist_size = struct.unpack_from("<H", data, offset)[0]
+            offset += 2 + idlist_size
+        if has_link_info:
+            li_flags = struct.unpack_from("<I", data, offset + 4)[0]
+            if li_flags & 0x01:  # VolumeIDAndLocalBasePath
+                local_path_off = struct.unpack_from("<I", data, offset + 16)[0]
+                path_start = offset + local_path_off
+                path_end = data.index(b"\x00", path_start)
+                candidate = data[path_start:path_end].decode("latin-1")
+                if os.path.exists(candidate):
+                    target = candidate
+    except Exception:
+        pass
+    _lnk_target_cache[lnk_path] = target
+    return target
+
+
 def _parse_url_file(path: str) -> tuple:
     url = None
     icon_path = ""
@@ -505,7 +541,7 @@ class GameCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         app_id = _steam_app_id(item.path)
-        if app_id:
+        if app_id and not item.use_icon:
             self._build_steam_ui(app_id)
         else:
             self._build_default_ui()
@@ -528,9 +564,14 @@ class GameCard(QFrame):
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setFixedHeight(72)
         self._icon_label.setStyleSheet("background: transparent;")
-        icon_source = self.item.icon_path if self.item.icon_path else (
-            self.item.path if "://" not in self.item.path else ""
-        )
+        if self.item.icon_path:
+            icon_source = self.item.icon_path
+        elif self.item.path.lower().endswith(".lnk"):
+            icon_source = _resolve_lnk_target(self.item.path)
+        elif "://" not in self.item.path:
+            icon_source = self.item.path
+        else:
+            icon_source = ""
         pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(56, 56) if icon_source else None
         if pixmap and not pixmap.isNull():
             self._icon_label.setPixmap(pixmap)
@@ -569,11 +610,14 @@ class GameCard(QFrame):
         self._cover_label.setStyleSheet("font-size: 38px; background: transparent;")
 
         # Title overlay at bottom — also aliased as _title_label for rename compatibility
+        _overlay_h = 40
         self._title_overlay = QLabel(self.item.title, self)
-        self._title_overlay.setGeometry(0, self.CARD_H - 28, self.CARD_W, 28)
-        self._title_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_overlay.setGeometry(0, self.CARD_H - _overlay_h, self.CARD_W, _overlay_h)
+        self._title_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        self._title_overlay.setWordWrap(True)
         self._title_overlay.setStyleSheet(
-            "background: rgba(0,0,0,160); color: #f1f5f9; font-size: 10px; padding: 2px;"
+            f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
+            f" font-size: 11px; font-weight: bold; padding: 2px 4px;"
         )
         self._title_label = self._title_overlay  # alias for _sync_card_titles
 
@@ -735,9 +779,14 @@ class GameCard(QFrame):
             self.grid.main_window._sync_card_titles(self.item)
             self.grid.main_window.save()
 
+    def _toggle_artwork(self):
+        self.item.use_icon = not self.item.use_icon
+        self.grid.main_window.save()
+        self.grid.main_window._refresh_card_everywhere(self.item)
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        run_action = QAction("▶  Run", self)
+        run_action = QAction("Run", self)
         run_action.triggered.connect(lambda: launcher.launch(self.item.path))
         menu.addAction(run_action)
 
@@ -749,7 +798,7 @@ class GameCard(QFrame):
         menu.addSeparator()
 
         if self.grid.is_favorites:
-            unfav_action = QAction("☆  Remove from Favorites", self)
+            unfav_action = QAction("Remove from Favorites", self)
             unfav_action.triggered.connect(lambda: self.grid.main_window.toggle_favorite(self))
             menu.addAction(unfav_action)
         else:
@@ -760,6 +809,13 @@ class GameCard(QFrame):
             remove_action = QAction("Remove", self)
             remove_action.triggered.connect(lambda: self.grid.remove_game(self.item))
             menu.addAction(remove_action)
+
+        if _steam_app_id(self.item.path):
+            menu.addSeparator()
+            art_label = "Use cover art" if self.item.use_icon else "Use icon instead"
+            art_action = QAction(art_label, self)
+            art_action.triggered.connect(self._toggle_artwork)
+            menu.addAction(art_action)
 
         menu.exec(event.globalPos())
 
@@ -869,6 +925,15 @@ class GameGrid(QScrollArea):
         self.tab.games.remove(item)
         self._rebuild_grid()
         self.main_window.save()
+
+    def _refresh_card(self, card: GameCard) -> None:
+        idx = self._cards.index(card)
+        self._layout.removeWidget(card)
+        card.deleteLater()
+        self._cards.pop(idx)
+        new_card = GameCard(card.item, self)
+        self._cards.insert(idx, new_card)
+        self._rebuild_grid()
 
     def scroll_to_card(self, card: GameCard) -> None:
         self.ensureWidgetVisible(card)
@@ -1225,6 +1290,12 @@ class MainWindow(QMainWindow):
             for card in grid._cards:
                 if card.item is item:
                     card._title_label.setText(item.title)
+
+    def _refresh_card_everywhere(self, item: GameItem) -> None:
+        for grid in [self._favorites_grid] + self._grids:
+            card = next((c for c in grid._cards if c.item is item), None)
+            if card:
+                grid._refresh_card(card)
 
     # ------------------------------------------------------------------
     # Game management

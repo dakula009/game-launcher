@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -540,11 +540,6 @@ class GameCard(QFrame):
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        # State for paintEvent-based steam card rendering
-        self._cover_pixmap: Optional[QPixmap] = None
-        self._border_color: str = BORDER
-        self._border_width: int = 1
-
         app_id = _steam_app_id(item.path)
         if app_id and not item.use_icon:
             self._build_steam_ui(app_id)
@@ -607,11 +602,12 @@ class GameCard(QFrame):
         self._play_overlay.hide()
 
     def _build_steam_ui(self, app_id: str):
-        # Placeholder shown while art downloads (hidden once art is ready)
-        self._placeholder = QLabel("🎮", self)
-        self._placeholder.setGeometry(0, 0, self.CARD_W, self.CARD_H)
-        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet("font-size: 38px; background: transparent;")
+        # Cover art label fills the card
+        self._cover_label = QLabel(self)
+        self._cover_label.setGeometry(0, 0, self.CARD_W, self.CARD_H)
+        self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cover_label.setText("🎮")
+        self._cover_label.setStyleSheet("font-size: 38px; background: transparent;")
 
         # Title overlay at bottom — also aliased as _title_label for rename compatibility
         _overlay_h = 40
@@ -652,35 +648,10 @@ class GameCard(QFrame):
             scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
             if scaled.height() > self.CARD_H:
                 scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
-            self._cover_pixmap = scaled
-            if hasattr(self, "_placeholder"):
-                self._placeholder.hide()
-            self.update()  # trigger paintEvent to draw art
+            self._cover_label.setPixmap(scaled)
+            self._cover_label.setText("")
+            self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()
-            if hasattr(self, "_star"):
-                self._star.raise_()
-
-    def paintEvent(self, event):
-        if self._cover_pixmap is not None:
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            # Draw cover art clipped to the exact rounded shape
-            path = QPainterPath()
-            path.addRoundedRect(0.0, 0.0, float(self.CARD_W), float(self.CARD_H), 18.0, 18.0)
-            painter.setClipPath(path)
-            painter.drawPixmap(0, 0, self._cover_pixmap)
-            painter.setClipping(False)
-            # Draw border on top of art
-            painter.setPen(QPen(QColor(self._border_color), self._border_width))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            half = self._border_width / 2.0
-            painter.drawRoundedRect(half, half,
-                                    self.CARD_W - self._border_width,
-                                    self.CARD_H - self._border_width,
-                                    18.0, 18.0)
-            painter.end()
-        else:
-            super().paintEvent(event)
 
     def _on_artwork_ready(self, app_id: str, cache_path: str):
         self._apply_cover_art(cache_path)
@@ -705,13 +676,9 @@ class GameCard(QFrame):
     # ------------------------------------------------------------------
 
     def highlight(self) -> None:
-        self._border_color, self._border_width = "#ffffff", 2
-        if self._cover_pixmap is not None:
-            self.update()
-        else:
-            self.setStyleSheet(
-                f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 18px; }}"
-            )
+        self.setStyleSheet(
+            f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 18px; }}"
+        )
         QTimer.singleShot(900, self._set_idle_style)
 
     # ------------------------------------------------------------------
@@ -719,22 +686,15 @@ class GameCard(QFrame):
     # ------------------------------------------------------------------
 
     def _set_idle_style(self):
-        self._border_color, self._border_width = BORDER, 1
-        if self._cover_pixmap is not None:
-            self.update()
-        else:
-            self.setStyleSheet(
-                f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 18px; }}"
-            )
+        self.setStyleSheet(
+            f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 18px; }}"
+        )
 
     def _set_hover_style(self):
-        self._border_color, self._border_width = ACCENT, 2
-        if self._cover_pixmap is not None:
-            self.update()
-        else:
-            self.setStyleSheet(
-                f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 18px; }}"
-            )
+        self.setStyleSheet(
+            f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 18px; }}"
+        )
+
     # ------------------------------------------------------------------
     # Hover
     # ------------------------------------------------------------------

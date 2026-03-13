@@ -803,39 +803,6 @@ class GameCard(QFrame):
         self._title_overlay.show()
         self._star.raise_()
 
-    def _switch_to_default_layout(self):
-        """Restore default icon layout (inverse of _switch_to_cover_layout)."""
-        if hasattr(self, '_cover_label'):
-            self._cover_label.hide()
-            self._cover_label.deleteLater()
-            del self._cover_label
-        if hasattr(self, '_title_overlay'):
-            self._title_overlay.hide()
-            self._title_overlay.deleteLater()
-            del self._title_overlay
-
-        # Replace play overlay with default-position version (over icon area)
-        if hasattr(self, '_play_overlay'):
-            self._play_overlay.deleteLater()
-        overlay_size = 48
-        ox = (self.CARD_W - overlay_size) // 2
-        oy = 10 + (72 - overlay_size) // 2
-        self._play_overlay = QLabel("▶", self)
-        self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._play_overlay.setStyleSheet(
-            f"background: {GREEN_PLAY}; color: white; font-size: 36px; border-radius: 8px;"
-        )
-        self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
-        self._play_overlay.hide()
-
-        if hasattr(self, '_icon_label'):
-            self._icon_label.show()
-        if hasattr(self, '_default_title_label'):
-            self._default_title_label.show()
-            self._title_label = self._default_title_label
-
-        self._star.raise_()
-
     def _manual_search_artwork(self):
         api_key = settings.get_rawg_key()
         if not api_key:
@@ -848,12 +815,12 @@ class GameCard(QFrame):
         self._start_nonsteam_search(api_key)
 
     def _clear_artwork(self):
-        cache = Path(self.item.artwork_path)
-        if cache.exists():
-            cache.unlink(missing_ok=True)
+        # Don't delete the cached file — other renamed cards may share history.
+        # Just unset the reference so this card reverts to its icon.
         self.item.artwork_path = ""
-        self._switch_to_default_layout()
-        self.artwork_updated.emit(self.item)
+        self.grid.main_window.save()
+        # Recreate the card from scratch so the original icon is reliably shown.
+        self.grid.main_window._refresh_card_everywhere(self.item)
 
     # ------------------------------------------------------------------
     # Star

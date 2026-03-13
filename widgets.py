@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon
+from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -38,6 +39,44 @@ from models import GameItem, GameTab
 _icon_provider = QFileIconProvider()
 FAVORITES_NAME = "★ Favorites"
 _PLUS_TAB      = "＋"          # sentinel text for the add-tab pseudo-tab
+
+# ---------------------------------------------------------------------------
+# Steam artwork helpers
+# ---------------------------------------------------------------------------
+
+_ARTWORK_DIR = Path(os.environ.get("APPDATA", Path.home())) / "MyGameHub" / "artwork"
+
+
+def _steam_app_id(path: str) -> str:
+    """Return app ID string if path is a steam://rungameid/... URL, else ''."""
+    prefix = "steam://rungameid/"
+    if path.lower().startswith(prefix):
+        return path[len(prefix):].strip()
+    return ""
+
+
+def _artwork_cache_path(app_id: str) -> Path:
+    return _ARTWORK_DIR / f"{app_id}.jpg"
+
+
+class ArtworkDownloader(QThread):
+    finished = Signal(str, str)  # (app_id, local_cache_path)
+
+    def __init__(self, app_id: str):
+        super().__init__()
+        self._app_id = app_id
+
+    def run(self):
+        url = f"https://cdn.akamai.steamstatic.com/steam/apps/{self._app_id}/library_600x900.jpg"
+        dest = _artwork_cache_path(self._app_id)
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            import urllib.request
+            urllib.request.urlretrieve(url, dest)
+            self.finished.emit(self._app_id, str(dest))
+        except Exception:
+            pass  # silently fall back to icon
+
 
 # ---------------------------------------------------------------------------
 # Design tokens
@@ -459,11 +498,27 @@ class GameCard(QFrame):
         self.grid = grid
         self._drag_start_pos: Optional[QPoint] = None
         self._dragging = False
+        self._downloader: Optional[ArtworkDownloader] = None
 
         self.setFixedSize(self.CARD_W, self.CARD_H)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        app_id = _steam_app_id(item.path)
+        if app_id:
+            self._build_steam_ui(app_id)
+        else:
+            self._build_default_ui()
+
+        # Star — top-right (always present)
+        self._star = QLabel(self)
+        self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
+        self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._refresh_star()
+
+        self._set_idle_style()
+
+    def _build_default_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 10, 8, 8)
         layout.setSpacing(6)
@@ -473,8 +528,8 @@ class GameCard(QFrame):
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setFixedHeight(72)
         self._icon_label.setStyleSheet("background: transparent;")
-        icon_source = item.icon_path if item.icon_path else (
-            item.path if "://" not in item.path else ""
+        icon_source = self.item.icon_path if self.item.icon_path else (
+            self.item.path if "://" not in self.item.path else ""
         )
         pixmap = _icon_provider.icon(QFileInfo(icon_source)).pixmap(56, 56) if icon_source else None
         if pixmap and not pixmap.isNull():
@@ -485,7 +540,7 @@ class GameCard(QFrame):
         layout.addWidget(self._icon_label)
 
         # Title
-        self._title_label = QLabel(item.title)
+        self._title_label = QLabel(self.item.title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setWordWrap(True)
         self._title_label.setStyleSheet(
@@ -505,13 +560,57 @@ class GameCard(QFrame):
         self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()
 
-        # Star — top-right
-        self._star = QLabel(self)
-        self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
-        self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._refresh_star()
+    def _build_steam_ui(self, app_id: str):
+        # Cover art label fills the card
+        self._cover_label = QLabel(self)
+        self._cover_label.setGeometry(0, 0, self.CARD_W, self.CARD_H)
+        self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cover_label.setText("🎮")
+        self._cover_label.setStyleSheet("font-size: 38px; background: transparent;")
 
-        self._set_idle_style()
+        # Title overlay at bottom — also aliased as _title_label for rename compatibility
+        self._title_overlay = QLabel(self.item.title, self)
+        self._title_overlay.setGeometry(0, self.CARD_H - 28, self.CARD_W, 28)
+        self._title_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_overlay.setStyleSheet(
+            "background: rgba(0,0,0,160); color: #f1f5f9; font-size: 10px; padding: 2px;"
+        )
+        self._title_label = self._title_overlay  # alias for _sync_card_titles
+
+        # Play overlay — centered on full card
+        overlay_size = 48
+        ox = (self.CARD_W - overlay_size) // 2
+        oy = (self.CARD_H - overlay_size) // 2
+        self._play_overlay = QLabel("▶", self)
+        self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._play_overlay.setStyleSheet(
+            f"background: {GREEN_PLAY}; color: white; font-size: 36px; border-radius: 8px;"
+        )
+        self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
+        self._play_overlay.hide()
+
+        # Check cache or start download
+        cache_path = _artwork_cache_path(app_id)
+        if cache_path.exists():
+            self._apply_cover_art(str(cache_path))
+        else:
+            self._downloader = ArtworkDownloader(app_id)
+            self._downloader.finished.connect(self._on_artwork_ready)
+            self._downloader.start()
+
+    def _apply_cover_art(self, cache_path: str):
+        pixmap = QPixmap(cache_path)
+        if not pixmap.isNull():
+            scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
+            if scaled.height() > self.CARD_H:
+                scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
+            self._cover_label.setPixmap(scaled)
+            self._cover_label.setText("")
+            self._cover_label.setStyleSheet("")
+            self._title_overlay.raise_()
+
+    def _on_artwork_ready(self, app_id: str, cache_path: str):
+        self._apply_cover_art(cache_path)
 
     # ------------------------------------------------------------------
     # Star

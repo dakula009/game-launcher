@@ -411,8 +411,8 @@ class WrapTabBar(QWidget):
             display = name.replace("★", "").strip() if is_fav else name
             btn = QPushButton(display)
             if is_fav:
-                btn.setIcon(QIcon(_make_star_pixmap(10, "#f5d060")))
-                btn.setIconSize(QSize(10, 10))
+                btn.setIcon(QIcon(_make_star_pixmap(14, "#f5d060")))
+                btn.setIconSize(QSize(14, 14))
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._style_btn(btn, is_selected, is_plus, is_favorites=is_fav)
             btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
@@ -708,7 +708,7 @@ class GameCard(QFrame):
 
         # Star — top-right (always present, above highlight overlay)
         self._star = StarWidget(self)
-        self._star.setGeometry(self.CARD_W - 22, 4, 18, 18)
+        self._star.setGeometry(self.CARD_W - 24, 6, 18, 18)
         self._refresh_star()
 
         self.artwork_updated.connect(lambda _: self.grid.main_window.save())

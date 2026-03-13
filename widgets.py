@@ -595,9 +595,9 @@ class AddGameCard(QFrame):
 # ---------------------------------------------------------------------------
 
 class StarWidget(QWidget):
-    """Draws a soft rounded star using bezier-curved points."""
+    """Draws a rounded star using bezier-curved points."""
     _OUTER_R = 10
-    _INNER_R = 5
+    _INNER_R = 5.5
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -625,7 +625,8 @@ class StarWidget(QWidget):
 
     @staticmethod
     def _star_path(cx: float, cy: float, r_outer: float, r_inner: float, points: int = 5) -> QPainterPath:
-        """Build a rounded star path using midpoint quadratic bezier curves."""
+        """Build a star path with gently rounded tips (t=0.3 bezier factor)."""
+        T = 0.3  # how far along each edge the curve starts/ends (lower = sharper)
         n = points * 2
         verts = []
         for i in range(n):
@@ -633,16 +634,16 @@ class StarWidget(QWidget):
             r = r_outer if i % 2 == 0 else r_inner
             verts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
 
-        def mid(a, b):
-            return ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        def lerp(a, b, t):
+            return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
 
         path = QPainterPath()
-        start = mid(verts[-1], verts[0])
-        path.moveTo(*start)
+        path.moveTo(*lerp(verts[-1], verts[0], 1 - T))
         for i in range(n):
             v = verts[i]
             nv = verts[(i + 1) % n]
-            path.quadTo(v[0], v[1], *mid(v, nv))
+            path.quadTo(v[0], v[1], *lerp(v, nv, T))
+            path.lineTo(*lerp(v, nv, 1 - T))
         path.closeSubpath()
         return path
 

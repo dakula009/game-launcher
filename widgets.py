@@ -612,14 +612,10 @@ class GameCard(QFrame):
         self.artwork_updated.connect(lambda _: self.grid.main_window.save())
 
         # Non-Steam artwork (must run after _star is created)
-        if not app_id and not item.use_icon:
-            if not item.artwork_path:
-                api_key = settings.get_rawg_key()
-                if api_key:
-                    self._start_nonsteam_search(api_key)
-            elif item.artwork_path != "none":
-                self._switch_to_cover_layout()
-                self._apply_nonsteam_cover_art(item.artwork_path)
+        # Only load from cache if artwork was previously found; never auto-search
+        if not app_id and not item.use_icon and item.artwork_path not in ("", "none"):
+            self._switch_to_cover_layout()
+            self._apply_nonsteam_cover_art(item.artwork_path)
 
         self._set_idle_style()
 
@@ -810,9 +806,11 @@ class GameCard(QFrame):
     def _switch_to_default_layout(self):
         """Restore default icon layout (inverse of _switch_to_cover_layout)."""
         if hasattr(self, '_cover_label'):
+            self._cover_label.hide()
             self._cover_label.deleteLater()
             del self._cover_label
         if hasattr(self, '_title_overlay'):
+            self._title_overlay.hide()
             self._title_overlay.deleteLater()
             del self._title_overlay
 

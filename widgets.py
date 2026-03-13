@@ -978,8 +978,13 @@ class GameCard(QFrame):
             self.grid.main_window._sync_card_titles(self.item)
             self.grid.main_window.save()
 
-    def _toggle_artwork(self):
-        self.item.use_icon = not self.item.use_icon
+    def _steam_search_artwork(self):
+        self.item.use_icon = False
+        self.grid.main_window.save()
+        self.grid.main_window._refresh_card_everywhere(self.item)
+
+    def _steam_clear_artwork(self):
+        self.item.use_icon = True
         self.grid.main_window.save()
         self.grid.main_window._refresh_card_everywhere(self.item)
 
@@ -1011,24 +1016,24 @@ class GameCard(QFrame):
             remove_action.triggered.connect(lambda: self.grid.remove_game(self.item))
             menu.addAction(remove_action)
 
-        if _steam_app_id(self.item.path):
-            menu.addSeparator()
-            art_label = "Use cover art" if self.item.use_icon else "Use icon instead"
-            art_action = QAction(art_label, self)
-            art_action.triggered.connect(self._toggle_artwork)
-            menu.addAction(art_action)
+        # Unified artwork options
+        menu.addSeparator()
+        app_id = _steam_app_id(self.item.path)
+        has_artwork = (app_id and not self.item.use_icon) or \
+                      (not app_id and self.item.artwork_path not in ("", "none"))
 
-        ns_id = not _steam_app_id(self.item.path)
-        if ns_id:
-            menu.addSeparator()
-            if self.item.artwork_path != "none":
-                search_act = QAction("Search for artwork", self)
-                search_act.triggered.connect(self._manual_search_artwork)
-                menu.addAction(search_act)
-            if self.item.artwork_path not in ("", "none"):
-                clear_act = QAction("Clear artwork", self)
-                clear_act.triggered.connect(self._clear_artwork)
-                menu.addAction(clear_act)
+        search_act = QAction("Search for artwork", self)
+        search_act.triggered.connect(
+            self._steam_search_artwork if app_id else self._manual_search_artwork
+        )
+        menu.addAction(search_act)
+
+        if has_artwork:
+            clear_act = QAction("Clear artwork", self)
+            clear_act.triggered.connect(
+                self._steam_clear_artwork if app_id else self._clear_artwork
+            )
+            menu.addAction(clear_act)
 
         menu.exec(event.globalPos())
 

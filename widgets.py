@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -648,7 +648,17 @@ class GameCard(QFrame):
             scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
             if scaled.height() > self.CARD_H:
                 scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
-            self._cover_label.setPixmap(scaled)
+            # Clip pixmap to rounded rect to match card border-radius
+            rounded = QPixmap(scaled.size())
+            rounded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, scaled.width(), scaled.height(), 18, 18)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, scaled)
+            painter.end()
+            self._cover_label.setPixmap(rounded)
             self._cover_label.setText("")
             self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()

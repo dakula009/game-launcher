@@ -860,7 +860,7 @@ class GameCard(QFrame):
             self._star.setStyleSheet("color: #ffd700; font-size: 19px; background: transparent;")
         else:
             self._star.setText("☆")
-            self._star.setStyleSheet("color: #94a3b8; font-size: 19px; background: transparent;")
+            self._star.setStyleSheet("color: #e2e8f0; font-size: 19px; background: transparent;")
 
     def sync_star(self) -> None:
         self._refresh_star()

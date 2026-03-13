@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -63,6 +63,20 @@ def _steam_app_id(path: str) -> str:
 
 def _artwork_cache_path(app_id: str) -> Path:
     return _ARTWORK_DIR / f"{app_id}.jpg"
+
+
+def _round_pixmap(pixmap: QPixmap, radius: int, bg: str = "#161f2e") -> QPixmap:
+    """Return a new opaque pixmap with rounded corners filled with *bg* color."""
+    result = QPixmap(pixmap.size())
+    result.fill(QColor(bg))
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, pixmap.width(), pixmap.height(), radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.end()
+    return result
 
 
 def _nonsteam_cache_path(title: str) -> Path:
@@ -725,7 +739,7 @@ class GameCard(QFrame):
             scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
             if scaled.height() > self.CARD_H:
                 scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
-            self._cover_label.setPixmap(scaled)
+            self._cover_label.setPixmap(_round_pixmap(scaled, 18))
             self._cover_label.setText("")
             self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()
@@ -742,7 +756,7 @@ class GameCard(QFrame):
             x = (scaled.width() - self.CARD_W) // 2
             y = (scaled.height() - self.CARD_H) // 2
             cropped = scaled.copy(x, y, self.CARD_W, self.CARD_H)
-            self._cover_label.setPixmap(cropped)
+            self._cover_label.setPixmap(_round_pixmap(cropped, 18))
             self._cover_label.setText("")
             self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()

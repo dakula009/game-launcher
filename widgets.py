@@ -650,7 +650,7 @@ class GameCard(QFrame):
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setWordWrap(True)
         self._title_label.setStyleSheet(
-            f"font-size: 11px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
+            f"font-size: 12px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
         )
         layout.addWidget(self._title_label)
         self._default_title_label = self._title_label
@@ -683,7 +683,7 @@ class GameCard(QFrame):
         self._title_overlay.setWordWrap(True)
         self._title_overlay.setStyleSheet(
             f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
-            f" font-size: 11px; font-weight: bold; padding: 2px 4px;"
+            f" font-size: 12px; font-weight: bold; padding: 2px 4px;"
         )
         self._title_label = self._title_overlay  # alias for _sync_card_titles
 
@@ -795,7 +795,7 @@ class GameCard(QFrame):
         self._title_overlay.setWordWrap(True)
         self._title_overlay.setStyleSheet(
             f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
-            f" font-size: 11px; font-weight: bold; padding: 2px 4px;"
+            f" font-size: 12px; font-weight: bold; padding: 2px 4px;"
         )
         self._title_label = self._title_overlay
 

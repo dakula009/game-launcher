@@ -602,15 +602,6 @@ class GameCard(QFrame):
             self._build_steam_ui(app_id)
         else:
             self._build_default_ui()
-            # Auto-trigger non-Steam artwork search
-            if not app_id:
-                if not item.artwork_path:
-                    api_key = settings.get_rawg_key()
-                    if api_key:
-                        self._start_nonsteam_search(api_key)
-                elif item.artwork_path != "none":
-                    self._switch_to_cover_layout()
-                    self._apply_nonsteam_cover_art(item.artwork_path)
 
         # Star — top-right (always present)
         self._star = QLabel(self)
@@ -619,6 +610,16 @@ class GameCard(QFrame):
         self._refresh_star()
 
         self.artwork_updated.connect(lambda _: self.grid.main_window.save())
+
+        # Non-Steam artwork (must run after _star is created)
+        if not app_id and not item.use_icon:
+            if not item.artwork_path:
+                api_key = settings.get_rawg_key()
+                if api_key:
+                    self._start_nonsteam_search(api_key)
+            elif item.artwork_path != "none":
+                self._switch_to_cover_layout()
+                self._apply_nonsteam_cover_art(item.artwork_path)
 
         self._set_idle_style()
 

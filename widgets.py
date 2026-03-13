@@ -610,7 +610,7 @@ class GameCard(QFrame):
                         self._start_nonsteam_search(api_key)
                 elif item.artwork_path != "none":
                     self._switch_to_cover_layout()
-                    self._apply_cover_art(item.artwork_path)
+                    self._apply_nonsteam_cover_art(item.artwork_path)
 
         # Star — top-right (always present)
         self._star = QLabel(self)
@@ -712,6 +712,19 @@ class GameCard(QFrame):
             self._downloader.start()
 
     def _apply_cover_art(self, cache_path: str):
+        """Steam-style: scale to card width, crop top portion."""
+        pixmap = QPixmap(cache_path)
+        if not pixmap.isNull():
+            scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
+            if scaled.height() > self.CARD_H:
+                scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
+            self._cover_label.setPixmap(scaled)
+            self._cover_label.setText("")
+            self._cover_label.setStyleSheet("")
+            self._title_overlay.raise_()
+
+    def _apply_nonsteam_cover_art(self, cache_path: str):
+        """Non-Steam: center-crop to fill card (handles landscape RAWG images)."""
         pixmap = QPixmap(cache_path)
         if not pixmap.isNull():
             scaled = pixmap.scaled(
@@ -745,7 +758,7 @@ class GameCard(QFrame):
         self.item.artwork_path = path
         if path != "none":
             self._switch_to_cover_layout()
-            self._apply_cover_art(path)
+            self._apply_nonsteam_cover_art(path)
         self.artwork_updated.emit(self.item)
 
     def _switch_to_cover_layout(self):

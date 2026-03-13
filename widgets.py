@@ -407,9 +407,14 @@ class WrapTabBar(QWidget):
         for i, name in enumerate(names):
             is_plus = (i == plus_idx)
             is_selected = (i == current_idx) and not is_plus
-            btn = QPushButton(name)
+            is_fav = (i == 0)
+            display = name.replace("★", "").strip() if is_fav else name
+            btn = QPushButton(display)
+            if is_fav:
+                btn.setIcon(QIcon(_make_star_pixmap(14, "#f5d060")))
+                btn.setIconSize(QSize(14, 14))
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            self._style_btn(btn, is_selected, is_plus, is_favorites=(i == 0))
+            self._style_btn(btn, is_selected, is_plus, is_favorites=is_fav)
             btn.clicked.connect(lambda checked=False, idx=i: self.tab_clicked.emit(idx))
             if not is_plus and i > 0:
                 btn.installEventFilter(self)
@@ -646,6 +651,22 @@ class StarWidget(QWidget):
             path.lineTo(*lerp(v, nv, 1 - T))
         path.closeSubpath()
         return path
+
+
+def _make_star_pixmap(size: int, color: str) -> QPixmap:
+    """Render a filled rounded star into a QPixmap of the given size."""
+    px = QPixmap(size, size)
+    px.fill(Qt.GlobalColor.transparent)
+    half = size / 2
+    outer = half * 0.85
+    inner = outer * (StarWidget._INNER_R / StarWidget._OUTER_R)
+    path = StarWidget._star_path(half, half, outer, inner)
+    painter = QPainter(px)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.fillPath(path, QColor(color))
+    painter.end()
+    return px
 
 
 # Game card

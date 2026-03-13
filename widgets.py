@@ -441,7 +441,7 @@ class WrapTabBar(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background: {BG_TABBAR}; color: {TEXT_SEC};"
                 f" border: 1px solid {BORDER}; border-radius: 8px;"
-                f" padding: 8px 14px; font-size: 15px; min-width: 36px; }}"
+                f" padding: 8px 8px; font-size: 13px; min-width: 28px; max-width: 36px; }}"
                 f"QPushButton:hover {{ background: {BG_CARD}; color: {TEXT_PRI}; }}"
             )
         elif selected:
@@ -496,13 +496,13 @@ class AddGameCard(QFrame):
     def _set_idle_style(self):
         self.setStyleSheet(
             f"AddGameCard {{ background: transparent; border: 2px dashed {BORDER};"
-            f"               border-radius: 12px; }}"
+            f"               border-radius: 18px; }}"
         )
 
     def _set_hover_style(self):
         self.setStyleSheet(
             f"AddGameCard {{ background: {BG_CARD}; border: 2px dashed {ACCENT};"
-            f"               border-radius: 12px; }}"
+            f"               border-radius: 18px; }}"
         )
 
     def enterEvent(self, event):
@@ -666,7 +666,7 @@ class GameCard(QFrame):
             self._star.setStyleSheet("color: #ffd700; font-size: 19px; background: transparent;")
         else:
             self._star.setText("☆")
-            self._star.setStyleSheet(f"color: {TEXT_SEC}; font-size: 19px; background: transparent;")
+            self._star.setStyleSheet("color: #94a3b8; font-size: 19px; background: transparent;")
 
     def sync_star(self) -> None:
         self._refresh_star()
@@ -677,7 +677,7 @@ class GameCard(QFrame):
 
     def highlight(self) -> None:
         self.setStyleSheet(
-            f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 12px; }}"
+            f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 18px; }}"
         )
         QTimer.singleShot(900, self._set_idle_style)
 
@@ -687,12 +687,12 @@ class GameCard(QFrame):
 
     def _set_idle_style(self):
         self.setStyleSheet(
-            f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 12px; }}"
+            f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 18px; }}"
         )
 
     def _set_hover_style(self):
         self.setStyleSheet(
-            f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 12px; }}"
+            f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 18px; }}"
         )
 
     # ------------------------------------------------------------------
@@ -797,11 +797,13 @@ class GameCard(QFrame):
 
         menu.addSeparator()
 
-        if self.grid.is_favorites:
-            unfav_action = QAction("Remove from Favorites", self)
-            unfav_action.triggered.connect(lambda: self.grid.main_window.toggle_favorite(self))
-            menu.addAction(unfav_action)
-        else:
+        fav_label = "Remove from Favorites" if self.item.favorited else "Add to Favorites"
+        fav_action = QAction(fav_label, self)
+        fav_action.triggered.connect(lambda: self.grid.main_window.toggle_favorite(self))
+        menu.addAction(fav_action)
+
+        if not self.grid.is_favorites:
+            menu.addSeparator()
             rename_action = QAction("Rename", self)
             rename_action.triggered.connect(self._rename)
             menu.addAction(rename_action)
@@ -939,12 +941,9 @@ class GameGrid(QScrollArea):
         self.ensureWidgetVisible(card)
 
     def dragEnterEvent(self, event):
-        if self.is_favorites:
-            event.ignore()
-            return
         if event.mimeData().hasFormat("application/x-game-card"):
             event.acceptProposedAction()
-        elif event.mimeData().hasUrls():
+        elif not self.is_favorites and event.mimeData().hasUrls():
             if any(
                 url.toLocalFile().lower().endswith((".exe", ".lnk", ".url"))
                 for url in event.mimeData().urls()
@@ -956,22 +955,20 @@ class GameGrid(QScrollArea):
             event.ignore()
 
     def dragMoveEvent(self, event):
-        if self.is_favorites:
-            event.ignore()
-            return
-        if event.mimeData().hasFormat("application/x-game-card") or event.mimeData().hasUrls():
+        if event.mimeData().hasFormat("application/x-game-card"):
+            event.acceptProposedAction()
+        elif not self.is_favorites and event.mimeData().hasUrls():
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dropEvent(self, event):
-        if self.is_favorites:
-            event.ignore()
-            return
         if event.mimeData().hasFormat("application/x-game-card"):
             self._handle_card_reorder(event)
-        else:
+        elif not self.is_favorites:
             self._handle_file_drop(event)
+        else:
+            event.ignore()
 
     def _find_insert_index(self, drop_pos: QPoint) -> int:
         for i, card in enumerate(self._cards):
@@ -1025,7 +1022,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("My Game Hub (ver. 1.2)")
-        self.resize(1000, 680)
+        self.resize(1400, 720)
         icon_path = Path(__file__).parent / "gamehub.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))

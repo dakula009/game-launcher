@@ -233,7 +233,8 @@ class SearchPopup(QListWidget):
         # stealing keyboard focus, so the search bar keeps accepting input.
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.NoDropShadowWindowHint
+            Qt.WindowType.NoDropShadowWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1454,10 +1455,12 @@ class MainWindow(QMainWindow):
         real_idx = tab_widget_idx - 1
         if 0 <= real_idx < len(self._grids):
             grid = self._grids[real_idx]
-            card = next((c for c in grid._cards if c.item is item), None)
-            if card:
-                grid.scroll_to_card(card)
-                card.highlight()
+            def _scroll_and_highlight():
+                card = next((c for c in grid._cards if c.item is item), None)
+                if card:
+                    grid.scroll_to_card(card)
+                    card.highlight()
+            QTimer.singleShot(50, _scroll_and_highlight)
 
     # ------------------------------------------------------------------
     # Favorites

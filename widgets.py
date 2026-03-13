@@ -604,7 +604,16 @@ class GameCard(QFrame):
         else:
             self._build_default_ui()
 
-        # Star — top-right (always present)
+        # Search-highlight overlay — transparent border drawn above all children
+        self._search_highlight = QFrame(self)
+        self._search_highlight.setGeometry(0, 0, self.CARD_W, self.CARD_H)
+        self._search_highlight.setStyleSheet(
+            "QFrame { border: 3px solid #fff; border-radius: 18px; background: transparent; }"
+        )
+        self._search_highlight.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._search_highlight.hide()
+
+        # Star — top-right (always present, above highlight overlay)
         self._star = QLabel(self)
         self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -843,10 +852,12 @@ class GameCard(QFrame):
     # ------------------------------------------------------------------
 
     def highlight(self) -> None:
-        self.setStyleSheet(
-            f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 18px; }}"
-        )
-        QTimer.singleShot(900, self._set_idle_style)
+        self._search_highlight.show()
+        self._search_highlight.raise_()
+        self._star.raise_()
+
+    def clear_highlight(self) -> None:
+        self._search_highlight.hide()
 
     # ------------------------------------------------------------------
     # Styling
@@ -867,6 +878,7 @@ class GameCard(QFrame):
     # ------------------------------------------------------------------
 
     def enterEvent(self, event):
+        self.grid.main_window._clear_search_highlight()
         effect = QGraphicsDropShadowEffect(self)
         effect.setBlurRadius(24)
         effect.setColor(QColor(ACCENT))
@@ -1288,6 +1300,7 @@ class MainWindow(QMainWindow):
         self._wrap_tab_bar.tab_right_clicked.connect(self._on_wrap_tab_right_click)
         self._wrap_tab_bar.tab_reordered.connect(self._on_tabs_reordered)
 
+        self._highlighted_card: Optional[GameCard] = None
         self._search_popup = SearchPopup()
         self._search_popup.result_selected.connect(self._on_search_result_selected)
 
@@ -1420,7 +1433,13 @@ class MainWindow(QMainWindow):
     # Tab change — intercept "＋" pseudo-tab
     # ------------------------------------------------------------------
 
+    def _clear_search_highlight(self) -> None:
+        if self._highlighted_card is not None:
+            self._highlighted_card.clear_highlight()
+            self._highlighted_card = None
+
     def _on_tab_changed(self, idx: int) -> None:
+        self._clear_search_highlight()
         if idx == self._plus_tab_idx():
             self._tab_widget.blockSignals(True)
             self._tab_widget.setCurrentIndex(max(0, idx - 1))
@@ -1461,6 +1480,8 @@ class MainWindow(QMainWindow):
             card = next((c for c in grid._cards if c.item is item), None)
             if card:
                 grid.scroll_to_card(card)
+                self._clear_search_highlight()
+                self._highlighted_card = card
                 card.highlight()
 
     # ------------------------------------------------------------------

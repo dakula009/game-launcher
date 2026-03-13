@@ -633,6 +633,14 @@ class GameCard(QFrame):
         self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
         self._play_overlay.hide()
 
+        # Border overlay — sits above cover art, draws the rounded border visibly
+        self._border_overlay = QLabel(self)
+        self._border_overlay.setGeometry(0, 0, self.CARD_W, self.CARD_H)
+        self._border_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._border_overlay.setStyleSheet(
+            f"border: 1px solid {BORDER}; border-radius: 18px; background: transparent;"
+        )
+
         # Check cache or start download
         cache_path = _artwork_cache_path(app_id)
         if cache_path.exists():
@@ -660,8 +668,10 @@ class GameCard(QFrame):
             painter.end()
             self._cover_label.setPixmap(rounded)
             self._cover_label.setText("")
-            self._cover_label.setStyleSheet("")
+            self._cover_label.setStyleSheet("background: transparent;")
             self._title_overlay.raise_()
+            self._border_overlay.raise_()
+            self._star.raise_()
 
     def _on_artwork_ready(self, app_id: str, cache_path: str):
         self._apply_cover_art(cache_path)
@@ -689,6 +699,10 @@ class GameCard(QFrame):
         self.setStyleSheet(
             f"GameCard {{ background: #1e3a5f; border: 2px solid #fff; border-radius: 18px; }}"
         )
+        if hasattr(self, "_border_overlay"):
+            self._border_overlay.setStyleSheet(
+                "border: 2px solid #fff; border-radius: 18px; background: transparent;"
+            )
         QTimer.singleShot(900, self._set_idle_style)
 
     # ------------------------------------------------------------------
@@ -699,11 +713,19 @@ class GameCard(QFrame):
         self.setStyleSheet(
             f"GameCard {{ background: {BG_CARD}; border: 1px solid {BORDER}; border-radius: 18px; }}"
         )
+        if hasattr(self, "_border_overlay"):
+            self._border_overlay.setStyleSheet(
+                f"border: 1px solid {BORDER}; border-radius: 18px; background: transparent;"
+            )
 
     def _set_hover_style(self):
         self.setStyleSheet(
             f"GameCard {{ background: #1a2744; border: 2px solid {ACCENT}; border-radius: 18px; }}"
         )
+        if hasattr(self, "_border_overlay"):
+            self._border_overlay.setStyleSheet(
+                f"border: 2px solid {ACCENT}; border-radius: 18px; background: transparent;"
+            )
 
     # ------------------------------------------------------------------
     # Hover

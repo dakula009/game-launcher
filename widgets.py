@@ -671,7 +671,8 @@ class GameCard(QFrame):
             self._cover_label.setStyleSheet("background: transparent;")
             self._title_overlay.raise_()
             self._border_overlay.raise_()
-            self._star.raise_()
+            if hasattr(self, "_star"):
+                self._star.raise_()
 
     def _on_artwork_ready(self, app_id: str, cache_path: str):
         self._apply_cover_art(cache_path)

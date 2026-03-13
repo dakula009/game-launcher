@@ -8,6 +8,8 @@ from PySide6.QtCore import QEvent, QFileInfo, QMimeData, QPoint, QRect, QSize, Q
 from PySide6.QtGui import QAction, QColor, QDrag, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFileIconProvider,
     QFrame,
@@ -32,7 +34,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import hashlib
+import re
+
 import launcher
+import settings
 import storage
 from models import GameItem, GameTab
 
@@ -59,6 +65,20 @@ def _artwork_cache_path(app_id: str) -> Path:
     return _ARTWORK_DIR / f"{app_id}.jpg"
 
 
+def _nonsteam_cache_path(title: str) -> Path:
+    slug = hashlib.md5(title.lower().encode()).hexdigest()
+    return _ARTWORK_DIR / f"ns_{slug}.jpg"
+
+
+def _clean_search_title(title: str) -> str:
+    """Strip common suffixes that confuse RAWG search."""
+    title = re.sub(
+        r'\s*[-–]\s*(digital|deluxe|gold|goty|edition|remastered).*$',
+        '', title, flags=re.IGNORECASE,
+    )
+    return title.strip()
+
+
 class ArtworkDownloader(QThread):
     finished = Signal(str, str)  # (app_id, local_cache_path)
 
@@ -76,6 +96,41 @@ class ArtworkDownloader(QThread):
             self.finished.emit(self._app_id, str(dest))
         except Exception:
             pass  # silently fall back to icon
+
+
+class NonSteamArtworkDownloader(QThread):
+    finished = Signal(str, str)  # (title, cache_path_or_"none")
+
+    def __init__(self, title: str, api_key: str):
+        super().__init__()
+        self._title = title
+        self._api_key = api_key
+
+    def run(self):
+        import urllib.request
+        import urllib.parse
+        import json as _json
+
+        dest = _nonsteam_cache_path(self._title)
+        try:
+            query = urllib.parse.urlencode({
+                "search": _clean_search_title(self._title),
+                "key": self._api_key,
+                "page_size": "1",
+            })
+            url = f"https://api.rawg.io/api/games?{query}"
+            with urllib.request.urlopen(url, timeout=10) as r:
+                data = _json.loads(r.read())
+            results = data.get("results", [])
+            img_url = results[0].get("background_image") if results else None
+            if not img_url:
+                self.finished.emit(self._title, "none")
+                return
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(img_url, dest)
+            self.finished.emit(self._title, str(dest))
+        except Exception:
+            self.finished.emit(self._title, "none")
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +582,7 @@ class GameCard(QFrame):
     CARD_W = 130
     CARD_H = 130
     _DRAG_THRESHOLD = 12
+    artwork_updated = Signal(object)
 
     def __init__(self, item: GameItem, grid: "GameGrid", parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -535,6 +591,7 @@ class GameCard(QFrame):
         self._drag_start_pos: Optional[QPoint] = None
         self._dragging = False
         self._downloader: Optional[ArtworkDownloader] = None
+        self._ns_downloader: Optional[NonSteamArtworkDownloader] = None
 
         self.setFixedSize(self.CARD_W, self.CARD_H)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -545,12 +602,23 @@ class GameCard(QFrame):
             self._build_steam_ui(app_id)
         else:
             self._build_default_ui()
+            # Auto-trigger non-Steam artwork search
+            if not app_id:
+                if not item.artwork_path:
+                    api_key = settings.get_rawg_key()
+                    if api_key:
+                        self._start_nonsteam_search(api_key)
+                elif item.artwork_path != "none":
+                    self._switch_to_cover_layout()
+                    self._apply_cover_art(item.artwork_path)
 
         # Star — top-right (always present)
         self._star = QLabel(self)
         self._star.setGeometry(self.CARD_W - 28, 4, 26, 26)
         self._star.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._refresh_star()
+
+        self.artwork_updated.connect(lambda _: self.grid.main_window.save())
 
         self._set_idle_style()
 
@@ -588,6 +656,7 @@ class GameCard(QFrame):
             f"font-size: 11px; font-weight: bold; color: {TEXT_PRI}; background: transparent;"
         )
         layout.addWidget(self._title_label)
+        self._default_title_label = self._title_label
 
         # Play overlay — green square centered over icon area
         overlay_size = 48
@@ -645,16 +714,134 @@ class GameCard(QFrame):
     def _apply_cover_art(self, cache_path: str):
         pixmap = QPixmap(cache_path)
         if not pixmap.isNull():
-            scaled = pixmap.scaledToWidth(self.CARD_W, Qt.TransformationMode.SmoothTransformation)
-            if scaled.height() > self.CARD_H:
-                scaled = scaled.copy(0, 0, self.CARD_W, self.CARD_H)
-            self._cover_label.setPixmap(scaled)
+            scaled = pixmap.scaled(
+                self.CARD_W, self.CARD_H,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (scaled.width() - self.CARD_W) // 2
+            y = (scaled.height() - self.CARD_H) // 2
+            cropped = scaled.copy(x, y, self.CARD_W, self.CARD_H)
+            self._cover_label.setPixmap(cropped)
             self._cover_label.setText("")
             self._cover_label.setStyleSheet("")
             self._title_overlay.raise_()
 
     def _on_artwork_ready(self, app_id: str, cache_path: str):
         self._apply_cover_art(cache_path)
+
+    # ------------------------------------------------------------------
+    # Non-Steam artwork
+    # ------------------------------------------------------------------
+
+    def _start_nonsteam_search(self, api_key: str):
+        self._ns_downloader = NonSteamArtworkDownloader(self.item.title, api_key)
+        self._ns_downloader.finished.connect(self._on_nonsteam_artwork_ready)
+        self._ns_downloader.start()
+
+    def _on_nonsteam_artwork_ready(self, title: str, path: str):
+        if title != self.item.title:
+            return
+        self.item.artwork_path = path
+        if path != "none":
+            self._switch_to_cover_layout()
+            self._apply_cover_art(path)
+        self.artwork_updated.emit(self.item)
+
+    def _switch_to_cover_layout(self):
+        """Replace default icon layout with full-bleed cover art layout."""
+        # Hide default UI widgets (kept alive for potential switch-back)
+        if hasattr(self, '_icon_label'):
+            self._icon_label.hide()
+        if hasattr(self, '_default_title_label'):
+            self._default_title_label.hide()
+
+        # Replace play overlay with version centered on full card
+        if hasattr(self, '_play_overlay'):
+            self._play_overlay.deleteLater()
+        overlay_size = 48
+        ox = (self.CARD_W - overlay_size) // 2
+        oy = (self.CARD_H - overlay_size) // 2
+        self._play_overlay = QLabel("▶", self)
+        self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._play_overlay.setStyleSheet(
+            f"background: {GREEN_PLAY}; color: white; font-size: 36px; border-radius: 8px;"
+        )
+        self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
+        self._play_overlay.hide()
+
+        # Create cover art label filling the card
+        self._cover_label = QLabel(self)
+        self._cover_label.setGeometry(0, 0, self.CARD_W, self.CARD_H)
+        self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cover_label.setText("🎮")
+        self._cover_label.setStyleSheet("font-size: 38px; background: transparent;")
+
+        # Title overlay at bottom
+        _overlay_h = 40
+        self._title_overlay = QLabel(self.item.title, self)
+        self._title_overlay.setGeometry(0, self.CARD_H - _overlay_h, self.CARD_W, _overlay_h)
+        self._title_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        self._title_overlay.setWordWrap(True)
+        self._title_overlay.setStyleSheet(
+            f"background: rgba(0,0,0,160); color: {TEXT_PRI};"
+            f" font-size: 11px; font-weight: bold; padding: 2px 4px;"
+        )
+        self._title_label = self._title_overlay
+
+        self._cover_label.show()
+        self._title_overlay.show()
+        self._star.raise_()
+
+    def _switch_to_default_layout(self):
+        """Restore default icon layout (inverse of _switch_to_cover_layout)."""
+        if hasattr(self, '_cover_label'):
+            self._cover_label.deleteLater()
+            del self._cover_label
+        if hasattr(self, '_title_overlay'):
+            self._title_overlay.deleteLater()
+            del self._title_overlay
+
+        # Replace play overlay with default-position version (over icon area)
+        if hasattr(self, '_play_overlay'):
+            self._play_overlay.deleteLater()
+        overlay_size = 48
+        ox = (self.CARD_W - overlay_size) // 2
+        oy = 10 + (72 - overlay_size) // 2
+        self._play_overlay = QLabel("▶", self)
+        self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._play_overlay.setStyleSheet(
+            f"background: {GREEN_PLAY}; color: white; font-size: 36px; border-radius: 8px;"
+        )
+        self._play_overlay.setGeometry(ox, oy, overlay_size, overlay_size)
+        self._play_overlay.hide()
+
+        if hasattr(self, '_icon_label'):
+            self._icon_label.show()
+        if hasattr(self, '_default_title_label'):
+            self._default_title_label.show()
+            self._title_label = self._default_title_label
+
+        self._star.raise_()
+
+    def _manual_search_artwork(self):
+        api_key = settings.get_rawg_key()
+        if not api_key:
+            QMessageBox.information(
+                self, "No API Key",
+                "Set your RAWG API key in Settings first.",
+            )
+            return
+        self.item.artwork_path = ""
+        self._start_nonsteam_search(api_key)
+
+    def _clear_artwork(self):
+        cache = Path(self.item.artwork_path)
+        if cache.exists():
+            cache.unlink(missing_ok=True)
+        self.item.artwork_path = ""
+        self._switch_to_default_layout()
+        self.artwork_updated.emit(self.item)
 
     # ------------------------------------------------------------------
     # Star
@@ -818,6 +1005,18 @@ class GameCard(QFrame):
             art_action = QAction(art_label, self)
             art_action.triggered.connect(self._toggle_artwork)
             menu.addAction(art_action)
+
+        ns_id = not _steam_app_id(self.item.path)
+        if ns_id:
+            menu.addSeparator()
+            if self.item.artwork_path != "none":
+                search_act = QAction("Search for artwork", self)
+                search_act.triggered.connect(self._manual_search_artwork)
+                menu.addAction(search_act)
+            if self.item.artwork_path not in ("", "none"):
+                clear_act = QAction("Clear artwork", self)
+                clear_act.triggered.connect(self._clear_artwork)
+                menu.addAction(clear_act)
 
         menu.exec(event.globalPos())
 
@@ -1015,6 +1214,32 @@ class GameGrid(QScrollArea):
 
 
 # ---------------------------------------------------------------------------
+# Settings dialog
+# ---------------------------------------------------------------------------
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setFixedWidth(380)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("RAWG API Key:"))
+        self._key_edit = QLineEdit(settings.get_rawg_key())
+        self._key_edit.setPlaceholderText("Paste your free key from rawg.io")
+        layout.addWidget(self._key_edit)
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.accepted.connect(self._save)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def _save(self):
+        settings.set_rawg_key(self._key_edit.text().strip())
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -1101,6 +1326,7 @@ class MainWindow(QMainWindow):
             ("+ Add Tab",  self._add_tab),
             ("Rename Tab", self._rename_tab),
             ("Delete Tab", self._delete_tab),
+            ("Settings",   self._open_settings),
             ("About",      self._show_about),
         ]:
             action = QAction(label, self)
@@ -1297,6 +1523,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Game management
     # ------------------------------------------------------------------
+
+    def _open_settings(self):
+        SettingsDialog(self).exec()
 
     def _show_about(self):
         QMessageBox.information(

@@ -9,6 +9,7 @@ class GameItem:
     icon_path: str = ""
     favorited: bool = False
     use_icon: bool = False
+    artwork_path: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -17,6 +18,7 @@ class GameItem:
             "icon_path": self.icon_path,
             "favorited": self.favorited,
             "use_icon": self.use_icon,
+            "artwork_path": self.artwork_path,
         }
 
     @classmethod
@@ -27,6 +29,7 @@ class GameItem:
             icon_path=data.get("icon_path", ""),
             favorited=data.get("favorited", False),
             use_icon=data.get("use_icon", False),
+            artwork_path=data.get("artwork_path", ""),
         )
 
 

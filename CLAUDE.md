@@ -42,6 +42,15 @@ The app is a PySide6 game launcher with 5 source files:
   - `GameGrid` — `QScrollArea` containing a `QGridLayout` that reflows cards on resize. `is_favorites=True` disables drag-and-drop and the "Add Game" context menu. Always appends `AddGameCard` placeholder last.
   - `MainWindow` — owns `self._tabs` (regular `GameTab` list) and `self._grids` (corresponding `GameGrid` list), plus separate `self._favorites_tab` / `self._favorites_grid`. The Favorites tab is always at `QTabWidget` index 0; regular tabs are at index `1..n`; the `＋` pseudo-tab is always last.
 
+## Game artwork
+
+Two sources depending on game type:
+
+- **Steam games** (path starts with `steam://rungameid/`) — art is auto-fetched from Steam's CDN (`cdn.akamai.steamstatic.com/steam/apps/{id}/library_600x900.jpg`) via `ArtworkDownloader` (a `QThread`). Triggered automatically when the card is built. Can be cleared via right-click → "Clear artwork" (sets `item.use_icon = True`).
+- **Non-Steam games** — art is fetched from the RAWG API (`rawg.io`) via `NonSteamArtworkDownloader` (a `QThread`). Requires a RAWG API key set in Settings. Only triggered manually via right-click → "Search for artwork". Title is cleaned of edition suffixes before querying (`_clean_search_title`). Result path stored in `item.artwork_path`; `"none"` means search ran but found nothing.
+
+Artwork is cached locally in `%APPDATA%\MyGameHub\artwork\`. Steam files are named `{app_id}.jpg`; non-Steam files are named `ns_{md5(title)}.jpg`. The `_round_pixmap()` helper clips all fetched art to 18px rounded corners before display.
+
 ## Key conventions
 
 - **Tab index offset**: `self._tabs[i]` maps to `self._tab_widget` index `i + 1`. Any code touching `currentIndex()` must handle index 0 as Favorites and `_plus_tab_idx()` as the `＋` pseudo-tab separately.

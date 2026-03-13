@@ -669,6 +669,13 @@ class GameCard(QFrame):
             self._cover_label.setPixmap(rounded)
             self._cover_label.setText("")
             self._cover_label.setStyleSheet("background: transparent;")
+            # Hard-clip the label widget to the rounded shape so its square
+            # extent never bleeds through the card corners
+            self._cover_label.setMask(
+                rounded.createMaskFromColor(
+                    Qt.GlobalColor.transparent, Qt.MaskMode.MaskInColor
+                )
+            )
             self._title_overlay.raise_()
             self._border_overlay.raise_()
             if hasattr(self, "_star"):

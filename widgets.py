@@ -103,9 +103,18 @@ _lnk_target_cache: dict = {}
 def _resolve_lnk_target(lnk_path: str) -> str:
     """Parse a .lnk binary to extract the target path (avoids shortcut arrow in icon).
 
-    Tries the Unicode path field first (modern .lnk files), then falls back to the
-    ASCII field.  Returns the original lnk_path if parsing fails so callers always
-    get a usable string.
+    MS-SHLLINK LinkInfo field layout (all offsets from start of LinkInfo block):
+      +0  LinkInfoSize          (total structure size)
+      +4  LinkInfoHeaderSize    (header size; Unicode fields present when >= 0x24)
+      +8  LinkInfoFlags         (bit 0 = VolumeIDAndLocalBasePath)
+      +12 VolumeIDOffset
+      +16 LocalBasePathOffset   (ASCII target path)
+      +20 CommonNetworkRelativeLinkOffset
+      +24 CommonPathSuffixOffset
+      +28 LocalBasePathOffsetUnicode  (only when LinkInfoHeaderSize >= 0x24)
+
+    Tries Unicode first (modern shortcuts), falls back to ASCII.
+    Returns original lnk_path on any failure so callers always get a usable string.
     """
     if lnk_path in _lnk_target_cache:
         return _lnk_target_cache[lnk_path]
@@ -116,37 +125,45 @@ def _resolve_lnk_target(lnk_path: str) -> str:
             data = f.read()
         if len(data) < 76:
             raise ValueError("too short")
-        link_flags = struct.unpack_from("<I", data, 20)[0]
-        has_idlist   = bool(link_flags & 0x01)
+
+        # Shell Link Header: LinkFlags at offset 20
+        link_flags    = struct.unpack_from("<I", data, 20)[0]
+        has_idlist    = bool(link_flags & 0x01)
         has_link_info = bool(link_flags & 0x02)
-        offset = 76
+
+        offset = 76  # skip the 76-byte Shell Link Header
+
         if has_idlist:
             idlist_size = struct.unpack_from("<H", data, offset)[0]
             offset += 2 + idlist_size
-        if has_link_info:
-            li_header_size = struct.unpack_from("<I", data, offset)[0]
-            li_flags       = struct.unpack_from("<I", data, offset + 4)[0]
-            if li_flags & 0x01:  # VolumeIDAndLocalBasePath present
-                # Prefer Unicode local base path (offset +24, present when header >= 28)
-                if li_header_size >= 28:
-                    unicode_off = struct.unpack_from("<I", data, offset + 24)[0]
-                    ps = offset + unicode_off
-                    # UTF-16LE null terminator = two consecutive zero bytes
-                    pe = ps
-                    while pe + 1 < len(data) and not (data[pe] == 0 and data[pe + 1] == 0):
-                        pe += 2
-                    candidate = data[ps:pe].decode("utf-16-le", errors="ignore")
-                    if candidate and os.path.exists(candidate):
-                        target = candidate
 
-                if target == lnk_path:  # Unicode field empty/missing, try ASCII
-                    # LocalBasePathOffset is at +12 inside LinkInfo (not +16)
-                    local_path_off = struct.unpack_from("<I", data, offset + 12)[0]
-                    ps = offset + local_path_off
-                    pe = data.index(b"\x00", ps)
-                    candidate = data[ps:pe].decode("latin-1", errors="ignore")
-                    if candidate and os.path.exists(candidate):
-                        target = candidate
+        if has_link_info:
+            # Read LinkInfoHeaderSize (+4) and LinkInfoFlags (+8)
+            li_header_size = struct.unpack_from("<I", data, offset + 4)[0]
+            li_flags       = struct.unpack_from("<I", data, offset + 8)[0]
+
+            if li_flags & 0x01:  # VolumeIDAndLocalBasePath present
+                # Unicode path at +28 (requires LinkInfoHeaderSize >= 0x24 = 36)
+                if li_header_size >= 0x24:
+                    unicode_off = struct.unpack_from("<I", data, offset + 28)[0]
+                    if unicode_off:
+                        ps = offset + unicode_off
+                        pe = ps
+                        while pe + 1 < len(data) and not (data[pe] == 0 and data[pe + 1] == 0):
+                            pe += 2
+                        candidate = data[ps:pe].decode("utf-16-le", errors="ignore")
+                        if candidate and os.path.exists(candidate):
+                            target = candidate
+
+                # ASCII fallback: LocalBasePathOffset at +16
+                if target == lnk_path:
+                    ascii_off = struct.unpack_from("<I", data, offset + 16)[0]
+                    if ascii_off:
+                        ps = offset + ascii_off
+                        pe = data.index(b"\x00", ps)
+                        candidate = data[ps:pe].decode("latin-1", errors="ignore")
+                        if candidate and os.path.exists(candidate):
+                            target = candidate
     except Exception:
         pass
     _lnk_target_cache[lnk_path] = target

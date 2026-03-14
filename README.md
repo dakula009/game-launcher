@@ -8,7 +8,9 @@ What it does:
 - Organize games into custom tabs (e.g. RPGs, FPS, Co-op)
 - Star your favorites — they instantly appear in a dedicated Favorites tab
 - Search across your entire library instantly
-- Launch any game with a single click
+- Find your up to 10 recently played games
+- Launch any game with a single click 
+- Access game arts from RAWG (API key needed) or Steam  
 - Drag cards to reorder, drag tabs to reorganize
 
 Why use it:

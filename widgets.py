@@ -1195,13 +1195,18 @@ class _DroppableContainer(QWidget):
         self._grid.dropEvent(event)
 
     def contextMenuEvent(self, event):
-        if self._grid.is_favorites:
-            return
-        menu = QMenu(self)
-        add_action = QAction("+ Add Game", self)
-        add_action.triggered.connect(self._grid.main_window._add_game_via_dialog)
-        menu.addAction(add_action)
-        menu.exec(event.globalPos())
+        if self._grid.is_recent:
+            menu = QMenu(self)
+            refresh_action = QAction("Refresh", self)
+            refresh_action.triggered.connect(self._grid.main_window._refresh_recent_grid)
+            menu.addAction(refresh_action)
+            menu.exec(event.globalPos())
+        elif not self._grid.is_favorites:
+            menu = QMenu(self)
+            add_action = QAction("+ Add Game", self)
+            add_action.triggered.connect(self._grid.main_window._add_game_via_dialog)
+            menu.addAction(add_action)
+            menu.exec(event.globalPos())
 
 
 class GameGrid(QScrollArea):
@@ -1210,6 +1215,7 @@ class GameGrid(QScrollArea):
         tab: GameTab,
         main_window: "MainWindow",
         is_favorites: bool = False,
+        is_recent: bool = False,
         parent: Optional[QWidget] = None,
         recent_meta: list = None,
     ):
@@ -1217,6 +1223,7 @@ class GameGrid(QScrollArea):
         self.tab = tab
         self.main_window = main_window
         self.is_favorites = is_favorites
+        self.is_recent = is_recent
         self._recent_meta: dict = {r["path"]: r for r in (recent_meta or [])}
         self._cards: List[GameCard] = []
 
@@ -1541,7 +1548,7 @@ class MainWindow(QMainWindow):
             recent_games.append(item)
         self._recent_tab = GameTab(name=RECENT_NAME, games=recent_games)
         self._recent_grid = GameGrid(self._recent_tab, self, is_favorites=True,
-                                     recent_meta=recent_records)
+                                     is_recent=True, recent_meta=recent_records)
         self._tab_widget.addTab(self._recent_grid, RECENT_NAME)
 
         # Index 2..N: Regular tabs

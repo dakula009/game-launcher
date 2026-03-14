@@ -707,6 +707,14 @@ class GameCard(QFrame):
         self.grid = grid
         self._last_played = last_played
         self._play_count = play_count
+        if last_played:
+            try:
+                played = datetime.fromisoformat(last_played)
+                date_str = played.strftime("%B %d, %Y at %I:%M %p")
+                count_str = f"{play_count} time{'s' if play_count != 1 else ''}"
+                self.setToolTip(f"Last played: {date_str}\nPlayed {count_str}")
+            except Exception:
+                pass
         self._drag_start_pos: Optional[QPoint] = None
         self._dragging = False
         self._downloader: Optional[ArtworkDownloader] = None
@@ -1586,7 +1594,13 @@ class MainWindow(QMainWindow):
         self.save()
 
     def _on_wrap_tab_right_click(self, idx: int) -> None:
-        if 1 < idx < self._plus_tab_idx():
+        if idx == 1:
+            menu = QMenu(self)
+            refresh_action = QAction("Refresh", self)
+            refresh_action.triggered.connect(self._refresh_recent_grid)
+            menu.addAction(refresh_action)
+            menu.exec(self._wrap_tab_bar.cursor().pos())
+        elif 1 < idx < self._plus_tab_idx():
             menu = QMenu(self)
             rename_action = QAction("Rename Tab", self)
             rename_action.triggered.connect(lambda: self._rename_tab(idx))
@@ -1595,6 +1609,21 @@ class MainWindow(QMainWindow):
             delete_action.triggered.connect(lambda: self._delete_tab_at(idx))
             menu.addAction(delete_action)
             menu.exec(self._wrap_tab_bar.cursor().pos())
+
+    def _refresh_recent_grid(self) -> None:
+        for card in list(self._recent_grid._cards):
+            self._recent_grid._layout.removeWidget(card)
+            card.deleteLater()
+        self._recent_grid._cards.clear()
+        self._recent_tab.games.clear()
+
+        recent_records = recent.load_recent()
+        self._recent_grid._recent_meta = {r["path"]: r for r in recent_records}
+        all_items = {g.path: g for tab in self._tabs for g in tab.games}
+        for r in recent_records:
+            item = all_items.get(r["path"]) or GameItem(title=r["title"], path=r["path"])
+            self._recent_tab.games.append(item)
+            self._recent_grid._add_card(item)
 
     # ------------------------------------------------------------------
     # Tab change — intercept "＋" pseudo-tab

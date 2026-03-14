@@ -4,7 +4,7 @@
 
 [Setup]
 AppName=My Game Hub
-AppVersion=1.4.0
+AppVersion=1.5.0
 DefaultDirName={autopf}\MyGameHub
 DefaultGroupName=My Game Hub
 OutputBaseFilename=MyGameHub_Setup

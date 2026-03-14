@@ -1302,7 +1302,7 @@ class GameGrid(QScrollArea):
                 mw._favorites_tab.games.remove(item)
             mw._favorites_grid._rebuild_grid()
 
-        # Remove from Recent if present
+        # Remove from Recent (in-memory grid and persistent history)
         rec_card = next((c for c in mw._recent_grid._cards if c.item is item), None)
         if rec_card:
             mw._recent_grid._layout.removeWidget(rec_card)
@@ -1311,6 +1311,7 @@ class GameGrid(QScrollArea):
             if item in mw._recent_tab.games:
                 mw._recent_tab.games.remove(item)
             mw._recent_grid._rebuild_grid()
+        recent.remove_entry(item.path)
 
         mw.save()
 

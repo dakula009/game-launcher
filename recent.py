@@ -47,6 +47,13 @@ def record_play(path: str, title: str) -> None:
     _save_all(records[:_MAX_STORED])
 
 
+def remove_entry(path: str) -> None:
+    """Remove a path from the recent history permanently."""
+    records = _load_all()
+    records = [r for r in records if r["path"] != path]
+    _save_all(records)
+
+
 def load_recent() -> list:
     """Return top 10 records sorted by last_played descending."""
     records = _load_all()

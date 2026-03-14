@@ -1290,7 +1290,29 @@ class GameGrid(QScrollArea):
         self._cards.remove(card)
         self.tab.games.remove(item)
         self._rebuild_grid()
-        self.main_window.save()
+
+        mw = self.main_window
+        # Remove from Favorites if present
+        fav_card = next((c for c in mw._favorites_grid._cards if c.item is item), None)
+        if fav_card:
+            mw._favorites_grid._layout.removeWidget(fav_card)
+            fav_card.deleteLater()
+            mw._favorites_grid._cards.remove(fav_card)
+            if item in mw._favorites_tab.games:
+                mw._favorites_tab.games.remove(item)
+            mw._favorites_grid._rebuild_grid()
+
+        # Remove from Recent if present
+        rec_card = next((c for c in mw._recent_grid._cards if c.item is item), None)
+        if rec_card:
+            mw._recent_grid._layout.removeWidget(rec_card)
+            rec_card.deleteLater()
+            mw._recent_grid._cards.remove(rec_card)
+            if item in mw._recent_tab.games:
+                mw._recent_tab.games.remove(item)
+            mw._recent_grid._rebuild_grid()
+
+        mw.save()
 
     def _refresh_card(self, card: GameCard) -> None:
         idx = self._cards.index(card)

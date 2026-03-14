@@ -2,8 +2,10 @@ import os
 import platform
 import subprocess
 
+import recent
 
-def launch(path: str) -> None:
+
+def launch(path: str, title: str = "") -> None:
     """Launch a game executable, shortcut, or steam:// URL."""
     system = platform.system()
     if system == "Windows":
@@ -12,6 +14,10 @@ def launch(path: str) -> None:
         subprocess.run(["open", path], check=False)
     else:
         subprocess.run(["xdg-open", path], check=False)
+    try:
+        recent.record_play(path, title)
+    except Exception:
+        pass
 
 
 def open_location(path: str) -> None:

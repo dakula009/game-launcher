@@ -40,12 +40,14 @@ import re
 from datetime import datetime
 
 import launcher
+import recent
 import settings
 import storage
 from models import GameItem, GameTab
 
 _icon_provider = QFileIconProvider()
 FAVORITES_NAME = "★ Favorites"
+RECENT_NAME    = "Recent"
 _PLUS_TAB      = "＋"          # sentinel text for the add-tab pseudo-tab
 
 # ---------------------------------------------------------------------------
@@ -1201,11 +1203,13 @@ class GameGrid(QScrollArea):
         main_window: "MainWindow",
         is_favorites: bool = False,
         parent: Optional[QWidget] = None,
+        recent_meta: list = None,
     ):
         super().__init__(parent)
         self.tab = tab
         self.main_window = main_window
         self.is_favorites = is_favorites
+        self._recent_meta: dict = {r["path"]: r for r in (recent_meta or [])}
         self._cards: List[GameCard] = []
 
         self.setWidgetResizable(True)
@@ -1246,7 +1250,10 @@ class GameGrid(QScrollArea):
             self._layout.addWidget(self._placeholder, idx // cols, idx % cols)
 
     def _add_card(self, item: GameItem):
-        card = GameCard(item, self)
+        meta = self._recent_meta.get(item.path, {})
+        card = GameCard(item, self,
+                        last_played=meta.get("last_played", ""),
+                        play_count=meta.get("play_count", 0))
         self._cards.append(card)
         self._rebuild_grid()
 
@@ -1429,6 +1436,8 @@ class MainWindow(QMainWindow):
             games=[g for tab in self._tabs for g in tab.games if g.favorited],
         )
         self._favorites_grid: Optional[GameGrid] = None
+        self._recent_tab: Optional[GameTab] = None
+        self._recent_grid: Optional[GameGrid] = None
 
         # Tab widget — no native tab bar; WrapTabBar renders tabs instead
         self._tab_widget = QTabWidget()
@@ -1515,7 +1524,19 @@ class MainWindow(QMainWindow):
         self._favorites_grid = GameGrid(self._favorites_tab, self, is_favorites=True)
         self._tab_widget.addTab(self._favorites_grid, FAVORITES_NAME)
 
-        # Index 1..N: Regular tabs
+        # Index 1: Recent (pinned)
+        recent_records = recent.load_recent()
+        all_items = {g.path: g for tab in self._tabs for g in tab.games}
+        recent_games = []
+        for r in recent_records:
+            item = all_items.get(r["path"]) or GameItem(title=r["title"], path=r["path"])
+            recent_games.append(item)
+        self._recent_tab = GameTab(name=RECENT_NAME, games=recent_games)
+        self._recent_grid = GameGrid(self._recent_tab, self, is_favorites=True,
+                                     recent_meta=recent_records)
+        self._tab_widget.addTab(self._recent_grid, RECENT_NAME)
+
+        # Index 2..N: Regular tabs
         for tab in self._tabs:
             grid = GameGrid(tab, self)
             self._grids.append(grid)

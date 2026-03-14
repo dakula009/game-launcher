@@ -1567,7 +1567,10 @@ class MainWindow(QMainWindow):
         all_items = {g.path: g for tab in self._tabs for g in tab.games}
         recent_games = []
         for r in recent_records:
-            item = all_items.get(r["path"]) or GameItem(title=r["title"], path=r["path"])
+            item = all_items.get(r["path"])
+            if item is None:
+                recent.remove_entry(r["path"])
+                continue
             recent_games.append(item)
         self._recent_tab = GameTab(name=RECENT_NAME, games=recent_games)
         self._recent_grid = GameGrid(self._recent_tab, self, is_favorites=True,

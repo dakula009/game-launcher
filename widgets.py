@@ -1016,7 +1016,7 @@ class GameCard(QFrame):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and not self._dragging:
             if self._drag_start_pos is not None:
-                launcher.launch(self.item.path)
+                launcher.launch(self.item.path, self.item.title)
         self._dragging = False
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
@@ -1062,7 +1062,7 @@ class GameCard(QFrame):
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         run_action = QAction("Run", self)
-        run_action.triggered.connect(lambda: launcher.launch(self.item.path))
+        run_action.triggered.connect(lambda: launcher.launch(self.item.path, self.item.title))
         menu.addAction(run_action)
 
         if "://" not in self.item.path:

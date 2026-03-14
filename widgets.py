@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 import hashlib
 import math
 import re
+from datetime import datetime
 
 import launcher
 import settings
@@ -669,6 +670,25 @@ def _make_star_pixmap(size: int, color: str) -> QPixmap:
     return px
 
 
+def _format_last_played(iso: str) -> str:
+    """Return a human-readable relative date string from an ISO timestamp."""
+    try:
+        played = datetime.fromisoformat(iso)
+        now = datetime.now()
+        delta = (now.date() - played.date()).days
+        if delta == 0:
+            return "Today"
+        if delta == 1:
+            return "Yesterday"
+        if delta <= 7:
+            return f"{delta} days ago"
+        if played.year == now.year:
+            return played.strftime("%b %-d") if os.name != "nt" else played.strftime("%b %#d")
+        return played.strftime("%b %-d, %Y") if os.name != "nt" else played.strftime("%b %#d, %Y")
+    except Exception:
+        return ""
+
+
 # Game card
 # ---------------------------------------------------------------------------
 
@@ -678,10 +698,13 @@ class GameCard(QFrame):
     _DRAG_THRESHOLD = 12
     artwork_updated = Signal(object)
 
-    def __init__(self, item: GameItem, grid: "GameGrid", parent: Optional[QWidget] = None):
+    def __init__(self, item: GameItem, grid: "GameGrid", parent: Optional[QWidget] = None,
+                 last_played: str = "", play_count: int = 0):
         super().__init__(parent)
         self.item = item
         self.grid = grid
+        self._last_played = last_played
+        self._play_count = play_count
         self._drag_start_pos: Optional[QPoint] = None
         self._dragging = False
         self._downloader: Optional[ArtworkDownloader] = None
@@ -757,6 +780,16 @@ class GameCard(QFrame):
         layout.addWidget(self._title_label)
         self._default_title_label = self._title_label
 
+        if self._last_played:
+            date_str = _format_last_played(self._last_played)
+            info_text = f"{date_str}  ·  {self._play_count}×" if self._play_count else date_str
+            self._play_info_label = QLabel(info_text)
+            self._play_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._play_info_label.setStyleSheet(
+                f"font-size: 10px; color: {TEXT_SEC}; background: transparent;"
+            )
+            layout.addWidget(self._play_info_label)
+
         # Play overlay — green square centered over icon area
         overlay_size = 48
         ox = (self.CARD_W - overlay_size) // 2
@@ -790,6 +823,17 @@ class GameCard(QFrame):
             f" border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;"
         )
         self._title_label = self._title_overlay  # alias for _sync_card_titles
+
+        if self._last_played:
+            date_str = _format_last_played(self._last_played)
+            info_text = f"{date_str}  ·  {self._play_count}×" if self._play_count else date_str
+            self._play_info_label = QLabel(info_text, self)
+            self._play_info_label.setGeometry(6, self.CARD_H - _overlay_h, 90, _overlay_h)
+            self._play_info_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            self._play_info_label.setStyleSheet(
+                f"font-size: 10px; color: {TEXT_SEC}; background: transparent; padding-left: 4px;"
+            )
+            self._play_info_label.show()
 
         # Play overlay — centered on full card
         overlay_size = 48
@@ -904,6 +948,17 @@ class GameCard(QFrame):
             f" border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;"
         )
         self._title_label = self._title_overlay
+
+        if self._last_played:
+            date_str = _format_last_played(self._last_played)
+            info_text = f"{date_str}  ·  {self._play_count}×" if self._play_count else date_str
+            self._play_info_label = QLabel(info_text, self)
+            self._play_info_label.setGeometry(6, self.CARD_H - _overlay_h, 90, _overlay_h)
+            self._play_info_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            self._play_info_label.setStyleSheet(
+                f"font-size: 10px; color: {TEXT_SEC}; background: transparent; padding-left: 4px;"
+            )
+            self._play_info_label.show()
 
         self._cover_label.show()
         self._title_overlay.show()

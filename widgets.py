@@ -503,7 +503,7 @@ class WrapTabBar(QWidget):
         src = self._drag_src
         plus = self._flow.count() - 1
         self._reset_drag()
-        if target > 0 and target < plus and target != src:
+        if target > 1 and src > 1 and target < plus and target != src:
             self.tab_reordered.emit(src, target)
 
     def _reset_drag(self):
@@ -1574,8 +1574,8 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def _on_tabs_reordered(self, from_idx: int, to_idx: int) -> None:
-        real_from = from_idx - 1
-        real_to = to_idx - 1
+        real_from = from_idx - 2
+        real_to = to_idx - 2
         self._tabs.insert(real_to, self._tabs.pop(real_from))
         self._grids.insert(real_to, self._grids.pop(real_from))
         self._tab_widget.blockSignals(True)
@@ -1586,7 +1586,7 @@ class MainWindow(QMainWindow):
         self.save()
 
     def _on_wrap_tab_right_click(self, idx: int) -> None:
-        if 0 < idx < self._plus_tab_idx():
+        if 1 < idx < self._plus_tab_idx():
             menu = QMenu(self)
             rename_action = QAction("Rename Tab", self)
             rename_action.triggered.connect(lambda: self._rename_tab(idx))
@@ -1628,7 +1628,7 @@ class MainWindow(QMainWindow):
         for i, (tab, grid) in enumerate(zip(self._tabs, self._grids)):
             for item in tab.games:
                 if text in item.title.lower():
-                    results.append((item, tab.name, i + 1))
+                    results.append((item, tab.name, i + 2))
         if results:
             self._search_popup.populate(results, self._search_bar)
         else:
@@ -1641,7 +1641,7 @@ class MainWindow(QMainWindow):
         # Flush all pending layout/resize events so the scroll area geometry
         # is fully settled before we try to scroll and highlight.
         QApplication.processEvents()
-        real_idx = tab_widget_idx - 1
+        real_idx = tab_widget_idx - 2
         if 0 <= real_idx < len(self._grids):
             grid = self._grids[real_idx]
             card = next((c for c in grid._cards if c.item is item), None)
@@ -1674,24 +1674,21 @@ class MainWindow(QMainWindow):
                     self._favorites_tab.games.remove(item)
                 self._favorites_grid._rebuild_grid()
 
-        for grid in self._grids:
+        for grid in [self._favorites_grid, self._recent_grid] + self._grids:
             for c in grid._cards:
                 if c.item is item:
                     c.sync_star()
-        for c in self._favorites_grid._cards:
-            if c.item is item:
-                c.sync_star()
 
         self.save()
 
     def _sync_card_titles(self, item: GameItem) -> None:
-        for grid in [self._favorites_grid] + self._grids:
+        for grid in [self._favorites_grid, self._recent_grid] + self._grids:
             for card in grid._cards:
                 if card.item is item:
                     card._title_label.setText(item.title)
 
     def _refresh_card_everywhere(self, item: GameItem) -> None:
-        for grid in [self._favorites_grid] + self._grids:
+        for grid in [self._favorites_grid, self._recent_grid] + self._grids:
             card = next((c for c in grid._cards if c.item is item), None)
             if card:
                 grid._refresh_card(card)
@@ -1714,10 +1711,10 @@ class MainWindow(QMainWindow):
 
     def _add_game_via_dialog(self):
         idx = self._tab_widget.currentIndex()
-        if idx == 0 or idx == self._plus_tab_idx():
+        if idx in (0, 1) or idx == self._plus_tab_idx():
             QMessageBox.information(self, "Info", "Switch to a regular tab to add games.")
             return
-        real_idx = idx - 1
+        real_idx = idx - 2
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Game Executable or Shortcut", "", "Games (*.exe *.lnk *.url)",
         )
@@ -1761,10 +1758,10 @@ class MainWindow(QMainWindow):
     def _rename_tab(self, idx: int = -1):
         if idx < 0:
             idx = self._tab_widget.currentIndex()
-        if idx == 0 or idx == self._plus_tab_idx():
+        if idx in (0, 1) or idx == self._plus_tab_idx():
             QMessageBox.information(self, "Info", "This tab cannot be renamed.")
             return
-        real_idx = idx - 1
+        real_idx = idx - 2
         name, ok = QInputDialog.getText(
             self, "Rename Tab", "New name:", text=self._tabs[real_idx].name
         )
@@ -1785,10 +1782,10 @@ class MainWindow(QMainWindow):
         self._delete_tab_at(idx)
 
     def _delete_tab_at(self, idx: int):
-        if idx == 0 or idx == self._plus_tab_idx():
+        if idx in (0, 1) or idx == self._plus_tab_idx():
             QMessageBox.information(self, "Info", "This tab cannot be deleted.")
             return
-        real_idx = idx - 1
+        real_idx = idx - 2
         tab = self._tabs[real_idx]
         reply = QMessageBox.question(
             self, "Delete Tab",

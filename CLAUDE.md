@@ -26,11 +26,12 @@ To uninstall, run `uninstall.bat` — it removes `%APPDATA%\MyGameHub\` and the 
 
 ## Architecture
 
-The app is a PySide6 game launcher with 6 source files:
+The app is a PySide6 game launcher with 7 source files:
 
 - **`models.py`** — Pure dataclasses: `GameItem` (title, path, icon_path, favorited, use_icon, artwork_path) and `GameTab` (name, list of games). Both have `to_dict`/`from_dict` for JSON serialization. `use_icon=True` forces the filesystem icon instead of fetched art; `artwork_path=""` means no search attempted, `"none"` means searched but found nothing.
 - **`storage.py`** — Reads/writes `%APPDATA%\MyGameHub\library.json`. Saves only regular tabs; the Favorites tab is not persisted — it is rebuilt at load time from `GameItem.favorited` flags. On first run, initialises four default tabs: `["RTS", "RPG", "FPS", "Other"]`.
 - **`settings.py`** — Reads/writes `%APPDATA%\MyGameHub\settings.json`. Provides `get_rawg_key()` / `set_rawg_key(key)` for the RAWG API key used by non-Steam artwork search.
+- **`recent.py`** — Reads/writes `%APPDATA%\MyGameHub\recent.json`. Provides `record_play(path, title)` (called by `launcher.launch()`) and `load_recent()` (returns top 10 records sorted by `last_played` desc). Stores up to 50 records; trims oldest on overflow. Each record: `{path, title, last_played, play_count}`.
 - **`launcher.py`** — `launch(path)` opens a game via `os.startfile` / `open` / `xdg-open`. `open_location(path)` opens the game's containing folder, resolving `.lnk` shortcuts on Windows via PowerShell before opening.
 - **`main.py`** — Entry point. Creates `QApplication`, sets the window icon from `gamehub.ico`, and starts `MainWindow`.
 - **`widgets.py`** — All UI. Key classes:
@@ -41,7 +42,7 @@ The app is a PySide6 game launcher with 6 source files:
   - `StarWidget` — custom `QWidget` that draws a rounded 5-pointed star via `QPainterPath` with bezier-curved tips (T=0.3 factor). Gold filled when favorited, white outline when not. Used inside `GameCard` (18×18) and rendered to a `QPixmap` via `_make_star_pixmap()` for the Favorites tab button icon.
   - `GameCard` — fixed 130×130 `QFrame`. `StarWidget` sits at the top-right. Green play overlay appears on hover. Clicking the card body launches the game; dragging reorders within the grid. Has two distinct UI layouts: **default** (icon + title label, used when no art) and **cover art** (full-bleed image + bottom title overlay). `_switch_to_cover_layout()` transitions from default to cover art dynamically. Cover art is rendered with 18px rounded corners via `_round_pixmap()` (transparent corner pixels + `setAutoFillBackground(False)` on the label). The title overlay at the bottom has matching `border-bottom-left/right-radius: 18px`. Icon fallback: tries `icon_path`, then `.lnk` target, then game path; shows 🎮 emoji if nothing resolves. `_resolve_lnk_target()` binary-parses `.lnk` files to extract the real exe path (avoids shortcut arrow in icon), with results cached in `_lnk_target_cache`. `.url` files are parsed by `_parse_url_file()` to extract `URL=` and `IconFile=` entries.
   - `GameGrid` — `QScrollArea` containing a `QGridLayout` that reflows cards on resize. `is_favorites=True` disables drag-and-drop and the "Add Game" context menu. Always appends `AddGameCard` placeholder last.
-  - `MainWindow` — owns `self._tabs` (regular `GameTab` list) and `self._grids` (corresponding `GameGrid` list), plus separate `self._favorites_tab` / `self._favorites_grid`. The Favorites tab is always at `QTabWidget` index 0; regular tabs are at index `1..n`; the `＋` pseudo-tab is always last.
+  - `MainWindow` — owns `self._tabs` (regular `GameTab` list) and `self._grids` (corresponding `GameGrid` list), plus separate `self._favorites_tab` / `self._favorites_grid` and `self._recent_tab` / `self._recent_grid`. The Favorites tab is always at `QTabWidget` index 0; Recent is always at index 1; regular tabs are at index `2..n`; the `＋` pseudo-tab is always last. `self._tabs[i]` maps to `QTabWidget` index `i + 2`.
 
 ## Game artwork
 
@@ -54,7 +55,7 @@ Artwork is cached locally in `%APPDATA%\MyGameHub\artwork\`. Steam files are nam
 
 ## Key conventions
 
-- **Tab index offset**: `self._tabs[i]` maps to `self._tab_widget` index `i + 1`. Any code touching `currentIndex()` must handle index 0 as Favorites and `_plus_tab_idx()` as the `＋` pseudo-tab separately.
+- **Tab index offset**: `self._tabs[i]` maps to `self._tab_widget` index `i + 2`. Any code touching `currentIndex()` must handle index 0 as Favorites, index 1 as Recent, and `_plus_tab_idx()` as the `＋` pseudo-tab separately.
 - **`＋` pseudo-tab**: Always the last `QTabWidget` index. `_on_tab_changed` intercepts clicks on it via `blockSignals` + snap-back, then calls `_add_tab()`. Use `_plus_tab_idx()` helper everywhere.
 - **WrapTabBar sync**: `_rebuild_wrap_tab_bar()` must be called after any structural tab change (add, delete, rename, reorder). It reads current `QTabWidget` state and rebuilds all buttons.
 - **Favorites sync**: `MainWindow.toggle_favorite(card)` is the single entry point for starring/unstarring. It updates `item.favorited`, adds/removes from `_favorites_grid`, and calls `sync_star()` on all cards referencing the same `GameItem`.
